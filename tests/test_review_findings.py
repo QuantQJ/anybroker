@@ -364,3 +364,226 @@ def test_a_real_reason_still_raises(reason):
     v = tv_venue(place_reply={'failureReason': reason, 'failureText': 'detail'})
     with pytest.raises(RejectedError, match=reason):
         v.place(OrderSpec('MNQZ6', Side.BUY, 1))
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Second round. Five more, each reproduced before being touched.
+# ══════════════════════════════════════════════════════════════════════════
+
+
+class TradovateShapedOrder:
+    """What tradovate-client's Order actually looks like.
+
+    Tradovate names the direction ``action``, not ``side``, and the size
+    ``qty`` from ``orderQty``, with prices in ``price`` and ``stop_price``.
+    Reading this library's own names produced side=None and lost the rest.
+    """
+
+    def __init__(self, **kw):
+        self.id = kw.get('id', 101)
+        self.account_id = kw.get('account_id', 7)
+        self.action = kw.get('action', 'Sell')
+        self.order_type = kw.get('order_type', 'Limit')
+        self.status = kw.get('status', 'Working')
+        self.qty = kw.get('qty', 3)
+        self.price = kw.get('price', 20150.25)
+        self.stop_price = kw.get('stop_price')
+        self.client_order_id = kw.get('client_order_id', 'k9')
+        self.raw = kw.get('raw', {})
+
+
+def test_the_direction_is_read_from_action_not_side():
+    v = tv_venue(orders=[TradovateShapedOrder(action='Sell')])
+    assert v.list_orders()[0].side is Side.SELL
+
+
+def test_a_buy_action_maps_too():
+    v = tv_venue(orders=[TradovateShapedOrder(action='Buy')])
+    assert v.list_orders()[0].side is Side.BUY
+
+
+def test_the_size_and_prices_survive_the_mapping():
+    v = tv_venue(orders=[TradovateShapedOrder()])
+    order = v.list_orders()[0]
+    assert order.qty == 3
+    assert order.limit_price == 20150.25
+    assert order.client_order_id == 'k9'
+    assert order.order_type is OrderType.LIMIT
+
+
+def test_the_raw_payload_is_the_last_resort_not_the_first():
+    """An object carrying only the wire names still maps."""
+
+    class WireNamesOnly:
+        id = 55
+        raw = {
+            'action': 'Buy',
+            'orderQty': 2,
+            'price': 100.0,
+            'ordStatus': 'Working',
+            'orderType': 'Limit',
+        }
+
+    v = tv_venue(orders=[WireNamesOnly()])
+    order = v.list_orders()[0]
+    assert order.side is Side.BUY and order.qty == 2 and order.limit_price == 100.0
+
+
+def test_a_partly_filled_stop_only_covers_what_is_left():
+    """A stop for five with four filled leaves one contract of cover."""
+    ib = FakeIB(accounts=('DU1234567',), positions=[fake_position('MNQZ6', 5)])
+    v = ib_venue(ib=ib, client_id=6001)
+    v.stop('MNQZ6', Side.SELL, 5, 20000.0)
+    ib.placed[-1].orderStatus.filled = 4.0
+    ib.placed[-1].orderStatus.status = 'Submitted'
+    cover = v.protection()['MNQZ6']
+    assert cover['protected_qty'] == 1.0, 'remaining, not original'
+    assert cover['exposed_qty'] == 4.0
+    assert [p.symbol for p in v.unprotected_positions()] == ['MNQZ6']
+
+
+def test_an_untouched_stop_still_covers_its_full_size():
+    ib = FakeIB(accounts=('DU1234567',), positions=[fake_position('MNQZ6', 5)])
+    v = ib_venue(ib=ib, client_id=6002)
+    v.stop('MNQZ6', Side.SELL, 5, 20000.0)
+    assert v.protection()['MNQZ6']['exposed_qty'] == 0.0
+
+
+def test_the_in_flight_record_is_written_before_the_send():
+    """A process killed between the send and the reply must not lose it."""
+    state = Path(tempfile.mkdtemp()) / 'state.json'
+    seen = {}
+
+    class CheckingIB(FakeIB):
+        def placeOrder(self, contract, order):
+            # At this instant the broker has the order and we have not
+            # returned. Whatever is on disk now is all a restart would get.
+            seen['on_disk'] = json.loads(state.read_text())['submissions']
+            return super().placeOrder(contract, order)
+
+    v = ib_venue(
+        ib=CheckingIB(accounts=('DU1234567',)), state_path=state, client_id=6003
+    )
+    v.place(OrderSpec('MNQZ6', Side.BUY, 1, client_order_id='k3'))
+    assert len(seen['on_disk']) == 1, (
+        'the record must be on disk before the request leaves'
+    )
+    assert seen['on_disk'][0]['state'] == 'in_flight'
+
+
+def test_a_restored_in_flight_record_blocks_a_resend():
+    state = Path(tempfile.mkdtemp()) / 'state.json'
+
+    class CheckingIB(FakeIB):
+        def placeOrder(self, contract, order):
+            raise TimeoutError('died here')
+
+    first = ib_venue(
+        ib=CheckingIB(accounts=('DU1234567',)), state_path=state, client_id=6004
+    )
+    with pytest.raises(TransportError):
+        first.place(OrderSpec('MNQZ6', Side.BUY, 1, client_order_id='k4'))
+
+    ib = FakeIB(accounts=('DU1234567',))
+    second = IbkrVenue(
+        Env.PAPER,
+        client_id=6005,
+        port=4001,
+        ib=ib,
+        state_path=state,
+        contract_factory=lambda s: FakeContract(s),
+    ).connect()
+    from anybroker import UnresolvedOrderError
+
+    with pytest.raises(UnresolvedOrderError):
+        second.place(OrderSpec('MNQZ6', Side.BUY, 1, client_order_id='k4'))
+    assert ib.placed == []
+
+
+def test_a_clean_failure_still_leaves_no_record_behind():
+    """Persisting early must not leave a stale lock after a clean refusal."""
+    state = Path(tempfile.mkdtemp()) / 'state.json'
+
+    class Refusing(FakeIB):
+        def placeOrder(self, contract, order):
+            raise ValueError('bad contract')
+
+    v = ib_venue(ib=Refusing(accounts=('DU1234567',)), state_path=state, client_id=6006)
+    with pytest.raises(TransportError):
+        v.place(OrderSpec('MNQZ6', Side.BUY, 1, client_order_id='k5'))
+    assert v.submissions() == {}
+    assert json.loads(state.read_text())['submissions'] == []
+
+
+def test_a_refusal_crosses_the_library_boundary_as_a_refusal(monkeypatch):
+    """tradovate-client raises OrderRejected; it must not arrive as transport.
+
+    Driven through a stand-in module so it runs without the optional
+    dependency installed, which is how the translation table is reached.
+    """
+    import sys
+    import types
+
+    class OrderRejected(Exception):
+        def __init__(self, message, *, reason=None, text=None):
+            super().__init__(message)
+            self.reason = reason
+            self.text = text
+
+    stub = types.ModuleType('tradovate_client.errors')
+    stub.OrderRejected = OrderRejected
+    for name in (
+        'AuthError',
+        'ThrottledError',
+        'NotFoundError',
+        'ConfigError',
+        'RequestError',
+        'TransportError',
+    ):
+        setattr(stub, name, type(name, (Exception,), {}))
+    # The parent package too: `import tradovate_client.errors` imports
+    # tradovate_client first, and without it the venue takes its ImportError
+    # branch and every failure becomes a TransportError.
+    parent = sys.modules.get('tradovate_client') or types.ModuleType('tradovate_client')
+    parent.errors = stub
+    monkeypatch.setitem(sys.modules, 'tradovate_client', parent)
+    monkeypatch.setitem(sys.modules, 'tradovate_client.errors', stub)
+
+    class Refusing(FakeTradovateClient):
+        def place(self, **kw):
+            raise OrderRejected('refused', reason='MaxPosLimitReached')
+
+    v = TradovateVenue(Env.PAPER, client=Refusing(), account='ACCOUNT_A')
+    with pytest.raises(RejectedError) as caught:
+        v.place(OrderSpec('MNQZ6', Side.BUY, 1))
+    assert caught.value.detail == 'MaxPosLimitReached'
+
+
+@pytest.mark.skipif(
+    __import__('importlib.util', fromlist=['util']).find_spec('tradovate_client')
+    is None,
+    reason='tradovate-client is an optional extra and is not on PyPI yet',
+)
+def test_the_same_holds_against_the_real_library():
+    from tradovate_client.errors import OrderRejected
+
+    class Refusing(FakeTradovateClient):
+        def place(self, **kw):
+            raise OrderRejected('refused', reason='InvalidPrice')
+
+    v = TradovateVenue(Env.PAPER, client=Refusing(), account='ACCOUNT_A')
+    with pytest.raises(RejectedError) as caught:
+        v.place(OrderSpec('MNQZ6', Side.BUY, 1))
+    assert caught.value.detail == 'InvalidPrice'
+
+
+def test_a_genuine_transport_failure_is_still_transport():
+    from anybroker import TransportError as TE
+
+    class Dying(FakeTradovateClient):
+        def place(self, **kw):
+            raise RuntimeError('socket went away')
+
+    v = TradovateVenue(Env.PAPER, client=Dying(), account='ACCOUNT_A')
+    with pytest.raises(TE):
+        v.place(OrderSpec('MNQZ6', Side.BUY, 1))

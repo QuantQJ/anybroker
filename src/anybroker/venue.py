@@ -48,6 +48,13 @@ PROTECTIVE_ORDER_TYPES = frozenset(
 TRAILING_FORMS = frozenset({'amount', 'percent'})
 
 
+def _remaining(order) -> float:
+    """How much of an order is still working, rather than how big it was."""
+    size = abs(float(getattr(order, 'qty', 0) or 0))
+    filled = abs(float(getattr(order, 'filled_qty', 0) or 0))
+    return max(0.0, size - filled)
+
+
 @dataclass
 class Submission:
     """One order this venue has sent, and what became of it.
@@ -226,6 +233,13 @@ class Venue:
             if existing is not None:
                 return existing
         submission = self._record_in_flight(spec)
+        # Written down *before* the request goes out. A process killed between
+        # the send and the reply is the exact case this record exists for, so
+        # persisting afterwards loses precisely the window it is meant to
+        # cover. An in-flight record that turns out never to have been sent is
+        # cleared on a clean failure, which is the cheap direction to be wrong
+        # in.
+        self._persist_submissions()
         try:
             order = self._place(spec)
         except TransportError as exc:
@@ -393,7 +407,10 @@ class Venue:
             covering = [
                 o for o in stops if o.symbol == position.symbol and o.side is wanted
             ]
-            protected = sum(abs(float(o.qty or 0)) for o in covering)
+            # Remaining, not original. A stop for five with four already
+            # filled leaves one contract of cover, and counting five would
+            # report a naked position as protected.
+            protected = sum(_remaining(o) for o in covering)
             size = abs(float(position.qty))
             out[position.symbol] = {
                 'qty': position.qty,

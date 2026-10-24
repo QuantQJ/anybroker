@@ -348,6 +348,14 @@ class TradovateVenue(Venue):
             return NotFoundError(str(exc), venue=self.name)
         if isinstance(exc, getattr(E, 'ConfigError', ())):
             return ConfigError(str(exc), venue=self.name)
+        # Checked before RequestError, since OrderRejected is the more
+        # specific answer: the venue received the order and refused it.
+        if isinstance(exc, getattr(E, 'OrderRejected', ())):
+            return RejectedError(
+                'Tradovate refused the order: %s' % exc,
+                venue=self.name,
+                detail=getattr(exc, 'reason', None),
+            )
         if isinstance(exc, getattr(E, 'RequestError', ())):
             return RejectedError(
                 'Tradovate refused the request: %s' % exc, venue=self.name
@@ -382,27 +390,49 @@ def _order_of(reply, venue, spec=None) -> Order:
 
 
 def _from_typed(obj, venue, spec=None) -> Order:
-    """Map tradovate-client's own ``Order`` onto this library's."""
-    side_value = str(getattr(obj, 'side', '') or '').lower()
-    kind = str(getattr(obj, 'order_type', '') or '')
+    """Map tradovate-client's own ``Order`` onto this library's.
+
+    Tradovate names the direction ``action`` and the size ``orderQty``, and
+    its price fields are ``price`` and ``stopPrice``. Reading ``side`` and
+    ``limit_price`` -- this library's names -- silently produced side=None and
+    lost the size and prices, which is why both names are tried here and the
+    raw payload is the last resort rather than the first.
+    """
+
+    def pick(*names, default=None):
+        for name in names:
+            value = getattr(obj, name, None)
+            if value not in (None, ''):
+                return value
+        raw = getattr(obj, 'raw', None)
+        if isinstance(raw, dict):
+            for name in names:
+                if raw.get(name) not in (None, ''):
+                    return raw[name]
+        return default
+
+    side_value = str(pick('action', 'side', default='') or '').lower()
+    kind = str(pick('order_type', 'orderType', default='') or '')
     reverse = {v: k for k, v in TV_ORDER_TYPES.items()}
     order = Order(
-        id=str(getattr(obj, 'id', '') or ''),
+        id=str(pick('id', default='') or ''),
         venue=venue,
-        symbol=str(getattr(obj, 'symbol', '') or (spec.symbol if spec else '')),
+        symbol=str(pick('symbol', default='') or (spec.symbol if spec else '')),
         side=Side(side_value) if side_value in ('buy', 'sell') else None,
-        qty=_f(getattr(obj, 'qty', 0)),
+        qty=_f(pick('qty', 'orderQty', default=0)),
         order_type=reverse.get(kind),
-        status=str(getattr(obj, 'status', '') or ''),
-        filled_qty=_f(getattr(obj, 'filled_qty', 0)),
-        avg_fill_price=_f(getattr(obj, 'avg_fill_price', 0)),
-        limit_price=getattr(obj, 'limit_price', None),
-        stop_price=getattr(obj, 'stop_price', None),
-        client_order_id=getattr(obj, 'client_order_id', None) or None,
+        status=str(pick('status', 'ordStatus', default='') or ''),
+        filled_qty=_f(pick('filled_qty', 'cumQty', default=0)),
+        avg_fill_price=_f(pick('avg_fill_price', 'avgPx', default=0)),
+        limit_price=pick('price', 'limit_price'),
+        stop_price=pick('stop_price', 'stopPrice'),
+        client_order_id=pick('client_order_id', 'clOrdId'),
         raw={'order': obj},
     )
     if order.side is None and spec is not None:
         order.side = spec.side
+    if not order.qty and spec is not None:
+        order.qty = float(spec.qty)
     return order
 
 
