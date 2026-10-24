@@ -4,10 +4,16 @@ ccxt has no IBKR adapter and never has, so this is the library's own.
 
 Two things about IB that this wrapper exists to get right:
 
-**Destination.** IB publishes four endpoints and they are ordinary TCP ports
-on the same host, which is why a hardcoded port is such an easy mistake.
-``Env.PAPER`` is the paper gateway and ``Env.LIVE`` is the live gateway;
-nothing else in the class knows a port number.
+**Destination.** IB's endpoints are ordinary TCP ports on the same host, one
+digit apart, and installations disagree about which is which. IBKR documents
+Gateway live on 4001 and paper on 4002; QJ's Studio runs the *live* gateway on
+4002, which is how the live book trades there. Because the vendor default and
+a real installation disagree, this class does not map an environment to a port
+at all -- ``port`` is required, the two known mappings are named constants you
+can opt into, and the destination is then **verified after connecting** by
+reading the account back. IB paper accounts carry a ``D`` prefix. Asking for
+paper and receiving a live account closes the connection and raises; so does
+the reverse.
 
 **Client id.** IB disconnects an existing session when a second one connects
 with the same client id. On QJ's fleet roughly seventy ids are already in use,
@@ -20,16 +26,28 @@ Order type strings were read from the installed ib_insync, not assumed:
 
 from ..enums import Env, OrderType, Side, TimeInForce
 from ..errors import (ConfigError, NotFoundError, RejectedError,
-                      TransportError, UnsupportedError)
+                      TransportError, UnsupportedError, WrongDestinationError)
 from ..models import Account, Order, Position, Quote
 from ..venue import Capabilities, Venue
 
-__all__ = ['IbkrVenue', 'GATEWAY_PORTS', 'IB_ORDER_TYPES', 'IB_TIF']
+__all__ = ['IbkrVenue', 'IBKR_DOCUMENTED_GATEWAY', 'IBKR_DOCUMENTED_TWS',
+           'PAPER_ACCOUNT_PREFIXES', 'looks_like_paper', 'IB_ORDER_TYPES',
+           'IB_TIF']
 
-#: IB Gateway, paper and live. TWS listens on 7497 and 7496; pass ``port=``
-#: to reach those instead.
-GATEWAY_PORTS = {Env.PAPER: 4001, Env.LIVE: 4002}
-TWS_PORTS = {Env.PAPER: 7497, Env.LIVE: 7496}
+#: IBKR's documented defaults. An installation may differ -- QJ's Studio runs
+#: the live gateway on 4002 -- so these are offered by name, never applied
+#: silently. Pass one explicitly: ``port=IBKR_DOCUMENTED_GATEWAY[Env.LIVE]``.
+IBKR_DOCUMENTED_GATEWAY = {Env.LIVE: 4001, Env.PAPER: 4002}
+IBKR_DOCUMENTED_TWS = {Env.LIVE: 7496, Env.PAPER: 7497}
+
+#: Prefixes IB uses for simulated accounts: DU for an individual paper
+#: account, DF for an advisor one. A live account has no D.
+PAPER_ACCOUNT_PREFIXES = ('DU', 'DF')
+
+
+def looks_like_paper(account) -> bool:
+    """Whether an IB account id is a simulated one."""
+    return str(account or '').upper().startswith(PAPER_ACCOUNT_PREFIXES)
 
 IB_ORDER_TYPES = {
     OrderType.MARKET: 'MKT',
@@ -54,9 +72,13 @@ IB_SIDE = {Side.BUY: 'BUY', Side.SELL: 'SELL'}
 class IbkrVenue(Venue):
     """IBKR. Requires ``ib_insync`` and a running gateway or TWS.
 
-        venue = IbkrVenue(Env.PAPER, client_id=7788)
+        venue = IbkrVenue(Env.PAPER, client_id=7788, port=4001)
         with venue:
             venue.limit('MNQZ6', Side.BUY, 2, 20150.25)
+
+    ``port`` is required and the environment is checked against the account IB
+    hands back, so a port that points at the wrong book fails at connect time
+    rather than at the first order.
     """
 
     name = 'ibkr'
@@ -70,9 +92,9 @@ class IbkrVenue(Venue):
         notes='parent/child brackets with a shared OCA group; '
               'reduce_only is not an IB concept')
 
-    def __init__(self, env, *, client_id=None, host='127.0.0.1', port=None,
-                 account=None, tws=False, timeout=20.0, ib=None,
-                 contract_factory=None):
+    def __init__(self, env, *, client_id=None, port=None, host='127.0.0.1',
+                 account=None, timeout=20.0, ib=None, contract_factory=None,
+                 verify_destination=True):
         super().__init__(env)
         if client_id is None and ib is None:
             raise ConfigError(
@@ -80,12 +102,24 @@ class IbkrVenue(Venue):
                 'when a second one uses the same id, and this fleet already '
                 'has ids in use for the running desks -- pick one nothing '
                 'else uses.', venue=self.name)
+        if port is None:
+            raise ConfigError(
+                'port is required. IB installations disagree about which port '
+                'is paper and which is live -- IBKR documents gateway live on '
+                '%d and paper on %d, and real installations run them the '
+                'other way round -- so this venue will not guess. Check which '
+                'gateway is listening and pass it, or pass '
+                'IBKR_DOCUMENTED_GATEWAY[%r] if yours is a default install. '
+                'The account is verified after connecting either way.'
+                % (IBKR_DOCUMENTED_GATEWAY[Env.LIVE],
+                   IBKR_DOCUMENTED_GATEWAY[Env.PAPER], self.env),
+                venue=self.name)
         self.client_id = client_id
         self.host = host
-        self.port = port if port is not None else (
-            TWS_PORTS if tws else GATEWAY_PORTS)[self.env]
+        self.port = int(port)
         self.account = account
         self.timeout = timeout
+        self.verify_destination = verify_destination
         self._ib = ib
         self._contract_factory = contract_factory
 
@@ -109,7 +143,60 @@ class IbkrVenue(Venue):
                 'could not reach IB at %s:%s as client %s (%s)'
                 % (self.host, self.port, self.client_id, exc),
                 venue=self.name) from exc
+        if self.verify_destination:
+            self._verify_destination()
         return self
+
+    def _verify_destination(self):
+        """Confirm the account IB handed back matches the environment asked for.
+
+        This is the guard that does not depend on knowing which port is which.
+        A paper account carries a D prefix; a live one does not. If the two
+        disagree the connection is closed before anything can be sent.
+        """
+        try:
+            accounts = [a for a in (self._ib.managedAccounts() or []) if a]
+        except Exception as exc:
+            self.close()
+            raise TransportError(
+                'connected to %s:%s but could not read the account back (%s); '
+                'refusing to trade a destination that cannot be verified'
+                % (self.host, self.port, exc), venue=self.name) from exc
+        if not accounts:
+            self.close()
+            raise WrongDestinationError(
+                'connected to %s:%s but IB reported no accounts, so the '
+                'destination cannot be confirmed as %s'
+                % (self.host, self.port, self.env.value),
+                asked=self.env, accounts=accounts, port=self.port,
+                venue=self.name)
+        paper = [a for a in accounts if looks_like_paper(a)]
+        live = [a for a in accounts if not looks_like_paper(a)]
+        if self.env is Env.PAPER and live:
+            self.close()
+            raise WrongDestinationError(
+                'asked for PAPER and connected to %s:%s, but IB handed back '
+                'live account(s) %s. Disconnected without sending anything. '
+                'That port is the live gateway on this machine.'
+                % (self.host, self.port, ', '.join(live)),
+                asked=self.env, accounts=accounts, port=self.port,
+                venue=self.name)
+        if self.env is Env.LIVE and not live:
+            self.close()
+            raise WrongDestinationError(
+                'asked for LIVE and connected to %s:%s, but every account IB '
+                'returned is a paper one (%s). Disconnected. Orders sent here '
+                'would not have reached the market.'
+                % (self.host, self.port, ', '.join(paper)),
+                asked=self.env, accounts=accounts, port=self.port,
+                venue=self.name)
+        if self.account and self.account not in accounts:
+            self.close()
+            raise WrongDestinationError(
+                'account %s was requested but IB at %s:%s only offers %s'
+                % (self.account, self.host, self.port, ', '.join(accounts)),
+                asked=self.env, accounts=accounts, port=self.port,
+                venue=self.name)
 
     def close(self):
         if self._ib is not None:

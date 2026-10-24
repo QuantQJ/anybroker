@@ -13,7 +13,7 @@ VERBS = ('get_account', 'list_positions', 'get_position', 'list_orders',
 
 
 def test_every_venue_answers_the_same_verbs():
-    for v in (IbkrVenue(Env.PAPER, client_id=1, ib=FakeIB()),
+    for v in (IbkrVenue(Env.PAPER, client_id=1, port=4002, ib=FakeIB(accounts=('DU1',))),
               CcxtVenue('fake', Env.LIVE, exchange=FakeCcxt())):
         for verb in VERBS:
             assert callable(getattr(v, verb)), '%s lacks %s' % (v.name, verb)
@@ -26,15 +26,15 @@ def test_the_verbs_match_the_names_the_hand_written_adapters_used():
 
 
 def test_a_venue_is_a_context_manager():
-    ib = FakeIB()
-    with IbkrVenue(Env.PAPER, client_id=1, ib=ib) as v:
+    ib = FakeIB(accounts=('DU1',))
+    with IbkrVenue(Env.PAPER, client_id=1, port=4002, ib=ib) as v:
         assert v.env is Env.PAPER
         assert ib.connected
     assert not ib.connected
 
 
 def test_every_venue_declares_its_capabilities():
-    for v in (IbkrVenue(Env.PAPER, client_id=1, ib=FakeIB()),
+    for v in (IbkrVenue(Env.PAPER, client_id=1, port=4002, ib=FakeIB(accounts=('DU1',))),
               CcxtVenue('fake', Env.LIVE, exchange=FakeCcxt())):
         caps = v.capabilities
         assert caps.order_types
@@ -43,5 +43,5 @@ def test_every_venue_declares_its_capabilities():
 
 
 def test_both_report_their_env_in_repr():
-    assert 'paper' in repr(IbkrVenue(Env.PAPER, client_id=1, ib=FakeIB()))
+    assert 'paper' in repr(IbkrVenue(Env.PAPER, client_id=1, port=4002, ib=FakeIB(accounts=('DU1',))))
     assert 'live' in repr(CcxtVenue('fake', Env.LIVE, exchange=FakeCcxt()))

@@ -21,7 +21,7 @@ the order to the live book.
 from .enums import Env, OrderType, Side, TimeInForce
 from .errors import (AuthError, BrokerError, ConfigError, NotFoundError,
                      RejectedError, ThrottledError, TransportError,
-                     UnsupportedError)
+                     UnsupportedError, WrongDestinationError)
 from .models import Account, Fill, Order, Position, Quote
 from .registry import available, open_venue
 from .spec import OrderSpec
@@ -36,5 +36,6 @@ __all__ = [
     'Account', 'Position', 'Order', 'Fill', 'Quote',
     'BrokerError', 'ConfigError', 'UnsupportedError', 'NotFoundError',
     'AuthError', 'ThrottledError', 'RejectedError', 'TransportError',
+    'WrongDestinationError',
     '__version__',
 ]

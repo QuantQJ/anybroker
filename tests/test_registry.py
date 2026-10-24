@@ -11,14 +11,14 @@ from anybroker.registry import CCXT_ONLY_NOTE, NATIVE_VENUES
 
 def test_ibkr_resolves_to_the_native_venue():
     from anybroker.venues.ibkr import IbkrVenue
-    v = open_venue('ibkr', Env.PAPER, client_id=4242)
+    v = open_venue('ibkr', Env.PAPER, client_id=4242, port=4002)
     assert isinstance(v, IbkrVenue) and v.env is Env.PAPER
 
 
 @pytest.mark.parametrize('alias', ['ibkr', 'IBKR', 'ib', 'interactivebrokers',
                                    'interactive_brokers'])
 def test_the_ibkr_aliases_all_work(alias):
-    assert open_venue(alias, Env.PAPER, client_id=1).name == 'ibkr'
+    assert open_venue(alias, Env.PAPER, client_id=1, port=4002).name == 'ibkr'
 
 
 def test_ibkr_is_native_because_ccxt_has_never_had_it():

@@ -3,16 +3,28 @@
 import pytest
 
 from anybroker import (ConfigError, Env, NotFoundError, OrderSpec, OrderType,
-                       Side, UnsupportedError)
-from anybroker.venues.ibkr import GATEWAY_PORTS, TWS_PORTS, IbkrVenue
+                       Side, UnsupportedError, WrongDestinationError)
+from anybroker.venues.ibkr import (IBKR_DOCUMENTED_GATEWAY,
+                                   IBKR_DOCUMENTED_TWS, IbkrVenue,
+                                   looks_like_paper)
 from fakes import FakeIB, fake_position
+
+#: Accounts IB would hand back, by kind. QJ's own are U1234567 (live) and
+#: DU1234567 (paper), which is where the D-prefix rule comes from.
+LIVE_ACCOUNTS = ('U1234567',)
+PAPER_ACCOUNTS = ('DU1234567',)
 
 
 def venue(env=Env.PAPER, **kw):
-    ib = kw.pop('ib', None) or FakeIB(**{k: kw.pop(k) for k in
-                                        ('positions', 'accounts', 'qualify')
-                                        if k in kw})
-    v = IbkrVenue(env, client_id=kw.pop('client_id', 7788), ib=ib, **kw)
+    """A connected venue on a fake IB whose account matches the environment."""
+    fake_kw = {k: kw.pop(k) for k in ('positions', 'qualify') if k in kw}
+    accounts = kw.pop('accounts', None)
+    if accounts is None:
+        accounts = LIVE_ACCOUNTS if Env(env) is Env.LIVE else PAPER_ACCOUNTS
+    ib = kw.pop('ib', None) or FakeIB(accounts=accounts, **fake_kw)
+    port = kw.pop('port', IBKR_DOCUMENTED_GATEWAY[Env(env)])
+    v = IbkrVenue(Env(env), client_id=kw.pop('client_id', 7788), port=port,
+                  ib=ib, **kw)
     v.connect()
     return v
 
@@ -30,25 +42,94 @@ def test_the_client_id_reaches_the_connection():
     assert v._ib.connect_args['clientId'] == 424242
 
 
-# ── destination ─────────────────────────────────────────────────────────────
+# ── destination: the port is not guessed, and the account is read back ─────
 
-def test_paper_and_live_are_different_ports():
-    assert venue(Env.PAPER).port == GATEWAY_PORTS[Env.PAPER] == 4001
-    assert venue(Env.LIVE).port == GATEWAY_PORTS[Env.LIVE] == 4002
-
-
-def test_tws_ports_are_available():
-    assert venue(Env.LIVE, tws=True).port == TWS_PORTS[Env.LIVE] == 7496
-    assert venue(Env.PAPER, tws=True).port == TWS_PORTS[Env.PAPER] == 7497
+def test_port_is_required_because_installations_disagree():
+    """IBKR documents gateway live 4001 / paper 4002. QJ's Studio runs live on
+    4002. Either default silently routes to the wrong book somewhere, so there
+    is no default."""
+    with pytest.raises(ConfigError, match='port is required'):
+        IbkrVenue(Env.PAPER, client_id=1)
 
 
-def test_an_explicit_port_wins():
-    assert venue(Env.PAPER, port=4005).port == 4005
+def test_the_refusal_explains_the_disagreement():
+    with pytest.raises(ConfigError) as caught:
+        IbkrVenue(Env.LIVE, client_id=1)
+    text = str(caught.value)
+    assert 'disagree' in text and 'will not guess' in text
+    assert 'verified after connecting' in text
+
+
+def test_the_documented_mappings_are_offered_by_name_not_applied():
+    assert IBKR_DOCUMENTED_GATEWAY == {Env.LIVE: 4001, Env.PAPER: 4002}
+    assert IBKR_DOCUMENTED_TWS == {Env.LIVE: 7496, Env.PAPER: 7497}
+
+
+def test_the_port_given_is_the_port_used():
+    assert venue(Env.LIVE, port=4002, accounts=LIVE_ACCOUNTS).port == 4002
+    assert venue(Env.PAPER, port=7497).port == 7497
 
 
 def test_env_is_required():
     with pytest.raises(TypeError):
-        IbkrVenue(client_id=1)
+        IbkrVenue(client_id=1, port=4001)
+
+
+# ── the guard that does not depend on knowing the port ─────────────────────
+
+def test_paper_prefixes():
+    assert looks_like_paper('DU1234567') and looks_like_paper('DF12345')
+    assert not looks_like_paper('U1234567')
+    assert not looks_like_paper('') and not looks_like_paper(None)
+
+
+def test_asking_for_paper_and_reaching_a_live_account_refuses_and_hangs_up():
+    """QJ's Studio: 4002 is live. A caller who assumed the vendor default and
+    asked for paper on 4002 must not get a live account."""
+    ib = FakeIB(accounts=LIVE_ACCOUNTS)
+    v = IbkrVenue(Env.PAPER, client_id=1, port=4002, ib=ib)
+    with pytest.raises(WrongDestinationError) as caught:
+        v.connect()
+    assert 'U1234567' in str(caught.value)
+    assert caught.value.asked is Env.PAPER and caught.value.port == 4002
+    assert not ib.connected, 'it must disconnect before raising'
+
+
+def test_asking_for_live_and_reaching_a_paper_account_also_refuses():
+    ib = FakeIB(accounts=PAPER_ACCOUNTS)
+    v = IbkrVenue(Env.LIVE, client_id=1, port=4001, ib=ib)
+    with pytest.raises(WrongDestinationError, match='every account'):
+        v.connect()
+    assert not ib.connected
+
+
+def test_a_matching_destination_connects_quietly():
+    assert venue(Env.LIVE, port=4002, accounts=LIVE_ACCOUNTS)._ib.connected
+    assert venue(Env.PAPER, port=4001, accounts=PAPER_ACCOUNTS)._ib.connected
+
+
+def test_no_accounts_at_all_is_an_unverifiable_destination():
+    ib = FakeIB(accounts=())
+    v = IbkrVenue(Env.LIVE, client_id=1, port=4001, ib=ib)
+    with pytest.raises(WrongDestinationError, match='no accounts'):
+        v.connect()
+    assert not ib.connected
+
+
+def test_a_requested_account_the_gateway_does_not_have_refuses():
+    ib = FakeIB(accounts=LIVE_ACCOUNTS)
+    v = IbkrVenue(Env.LIVE, client_id=1, port=4002, ib=ib, account='U999')
+    with pytest.raises(WrongDestinationError, match='only offers'):
+        v.connect()
+    assert not ib.connected
+
+
+def test_verification_can_be_switched_off_deliberately():
+    ib = FakeIB(accounts=LIVE_ACCOUNTS)
+    v = IbkrVenue(Env.PAPER, client_id=1, port=4002, ib=ib,
+                  verify_destination=False)
+    v.connect()
+    assert ib.connected, 'opting out is allowed, but it has to be explicit'
 
 
 # ── order translation ───────────────────────────────────────────────────────
@@ -176,7 +257,7 @@ def test_get_position_finds_one_and_returns_none_otherwise():
 
 def test_the_account_is_normalised():
     account = venue().get_account()
-    assert account.id == 'DU111' and account.equity == 50250.0
+    assert account.id == PAPER_ACCOUNTS[0] and account.equity == 50250.0
     assert account.cash == 50000.0 and account.open_pnl == 250.0
 
 
@@ -186,8 +267,10 @@ def test_several_accounts_must_be_disambiguated():
         v.get_account()
 
 
-def test_no_accounts_raises():
-    v = venue(accounts=())
+def test_no_accounts_raises_once_past_verification():
+    """With verification off, get_account() is still the one that complains."""
+    v = IbkrVenue(Env.PAPER, client_id=1, port=4001, ib=FakeIB(accounts=()),
+                  verify_destination=False).connect()
     with pytest.raises(NotFoundError, match='no managed accounts'):
         v.get_account()
 
