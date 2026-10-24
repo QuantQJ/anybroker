@@ -55,7 +55,15 @@ CCXT_TIF = {
 def _capabilities_of(exchange) -> Capabilities:
     """Read what this exchange says it can do, from ccxt's own ``has``."""
     has = dict(getattr(exchange, 'has', {}) or {})
-    types = {OrderType.MARKET, OrderType.LIMIT}
+    types = set()
+    # Derived, not assumed. Nearly every exchange does market and limit, but
+    # "nearly" is not "all", and a capability table that guesses is worse than
+    # none. createOrder covers an exchange that reports only the generic call.
+    generic = has.get('createOrder')
+    if has.get('createMarketOrder') or generic:
+        types.add(OrderType.MARKET)
+    if has.get('createLimitOrder') or generic:
+        types.add(OrderType.LIMIT)
     if has.get('createStopOrder') or has.get('createTriggerOrder'):
         types |= {OrderType.STOP, OrderType.STOP_LIMIT}
     forms = set()

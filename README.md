@@ -5,7 +5,7 @@ One interface over the brokers you actually trade.
 ```python
 from anybroker import open_venue, Env, Side
 
-ib = open_venue("ibkr", Env.PAPER, client_id=7788)
+ib = open_venue("ibkr", Env.PAPER, client_id=7788, port=4002)  # see below
 with ib:
     ib.limit("MNQZ6", Side.BUY, 2, 20150.25)
     print(ib.list_positions())
@@ -135,28 +135,53 @@ venue.capabilities.supports_brackets
 venue.capabilities.supports_modify
 ```
 
-For a ccxt venue these are read from the exchange's own `has` table, so an
-order type the exchange cannot do is refused before it is built, not after it
-is rejected.
+For a ccxt venue these are read from the exchange's own `has` table — market
+and limit included, rather than assumed — so an order type the exchange does
+not advertise is refused before the order is built.
+
+That is only as good as `has`. An exchange that under-reports will have a
+capability refused that it could in fact do, and one that over-reports will
+have it accepted and then rejected at the venue. Treat it as the exchange's
+own claim, not as a guarantee.
 
 ## IBKR
 
 ```python
 from anybroker import open_venue, Env
 
-ib = open_venue("ibkr", Env.LIVE, client_id=7788, account="U1234567")
+ib = open_venue("ibkr", Env.LIVE, client_id=7788, port=4001, account="U1234567")
 ```
 
 `client_id` is **required and has no default.** IB disconnects an existing
 session when a second one connects with the same id, so a default here would
 knock whatever is already running offline. Pick an id nothing else uses.
 
-| | port |
-| --- | --- |
-| `Env.PAPER` | 4001 (gateway) or 7497 with `tws=True` |
-| `Env.LIVE` | 4002 (gateway) or 7496 with `tws=True` |
+`port` is **required** — there is no default and no `tws=` shortcut. IBKR's
+documented defaults are:
 
-Pass `port=` for anything else. Symbols are qualified through IB, and an
+| | IB Gateway | TWS |
+| --- | --- | --- |
+| live | 4001 | 7496 |
+| paper | 4002 | 7497 |
+
+**Installations vary** and a gateway can be configured either way round, so
+check your own rather than trusting that table:
+
+```sh
+lsof -nP -iTCP -sTCP:LISTEN | grep -E '4001|4002|7496|7497'
+```
+
+The constants are available by name if yours is a default install:
+
+```python
+from anybroker.venues.ibkr import IBKR_DOCUMENTED_GATEWAY, IBKR_DOCUMENTED_TWS
+
+open_venue("ibkr", Env.LIVE, client_id=7788, port=IBKR_DOCUMENTED_GATEWAY[Env.LIVE])
+```
+
+Because the port cannot be trusted, the venue reads the account back after
+connecting and refuses a mismatch — which is the guard that does not depend on
+getting it right. Symbols are qualified through IB, and an
 ambiguous one raises instead of a leg being picked for you — pass
 `contract_factory=` or an `ib_insync` `Contract` if you have your own rules.
 
@@ -172,8 +197,13 @@ second = venue.place(spec)  # nothing is sent
 assert second.id == first.id
 ```
 
-The second call reads the order back **from the venue**, not from a cache, so
-what you get reflects the broker's current state. Three outcomes:
+The second call reads the order back **from the venue** rather than replaying
+the first reply. One caveat worth stating: if the venue cannot be reached, or
+returns nothing for that id, it falls back to the order recorded when it was
+sent — so a network blip cannot turn a duplicate check into a second order,
+but the state you get back is the last known one rather than guaranteed fresh.
+
+Three outcomes:
 
 | the first one is | `place()` does |
 | --- | --- |
@@ -191,9 +221,15 @@ venue.place(OrderSpec(..., client_order_id="long0558:2026-10-24"))  # better
 
 Identity comes from `spec.idempotency_key` — your `client_order_id` when you
 set one, otherwise a digest of what the order instructs (symbol, side, size,
-type, prices, bracket). `label` and `extra` are excluded, because they
-describe an order rather than change it. **A rule that fires daily should set
-its own id, scoped to the day.**
+type, prices, bracket). **A rule that fires daily should set its own id,
+scoped to the day.**
+
+`label` and `extra` are **not** part of that digest. `label` is pure
+annotation, so that is safe. `extra` is not: it passes venue-specific fields
+straight through and can change what the order does — Alpaca's `opg` and
+`cls` timings go through it, for instance. So two orders differing only in
+`extra` share a fingerprint and the second will be treated as a duplicate.
+**If `extra` changes the order, give it its own `client_order_id`.**
 
 ### The unanswered write
 
@@ -223,7 +259,7 @@ ib = open_venue(
     "ibkr",
     Env.LIVE,
     client_id=7788,
-    port=4002,
+    port=4002,  # a NON-default live gateway; check your own
     state_path="~/.local/state/anybroker/ibkr.json",
 )
 ```
@@ -294,8 +330,29 @@ pip install anybroker                  # the interface, no dependencies
 pip install "anybroker[crypto]"        # + ccxt
 pip install "anybroker[ibkr]"          # + ib_insync
 pip install "anybroker[alpaca]"        # + alpaca-py
-pip install "anybroker[all]"
+pip install "anybroker[tradovate]"     # + tradovate-client
+pip install "anybroker[all]"           # ccxt + ib_insync + alpaca-py
 ```
+
+`[all]` deliberately leaves out `tradovate-client`, because it is not on PyPI
+yet — install it from source:
+
+```sh
+pip install "git+https://github.com/QuantQJ/tradovate-client"
+```
+
+```python
+from anybroker import available
+
+available()
+# {'native': ['alpaca', 'ibkr'],
+#  'native_missing': {'tradovate': 'pip install "anybroker[tradovate]"'},
+#  'all_native': ['alpaca', 'ibkr', 'tradovate'],
+#  'ccxt': [...]}
+```
+
+`available()` reports only the venues whose driver actually imports, so it is
+a readiness check rather than a catalogue.
 
 Python 3.10 through 3.13, which is what CI tests. `ccxt` and `alpaca-py` both
 require 3.10, and `ib_insync` does not import on 3.14 — its `eventkit`

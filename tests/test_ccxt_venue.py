@@ -47,6 +47,41 @@ def test_capabilities_come_from_ccxts_own_has_table():
     assert OrderType.MARKET in plain.capabilities.order_types
 
 
+def test_even_market_and_limit_are_derived_not_assumed():
+    """An exchange advertising neither gets neither, rather than both for free."""
+    bare = CcxtVenue(
+        'fake',
+        Env.LIVE,
+        exchange=FakeCcxt(
+            has={
+                'createOrder': False,
+                'createMarketOrder': False,
+                'createLimitOrder': False,
+                'createStopOrder': False,
+                'createTriggerOrder': False,
+            }
+        ),
+    )
+    assert bare.capabilities.order_types == frozenset()
+
+
+def test_the_generic_create_order_covers_market_and_limit():
+    """All 104 real exchanges report createOrder; ten omit createMarketOrder."""
+    generic = CcxtVenue(
+        'fake',
+        Env.LIVE,
+        exchange=FakeCcxt(
+            has={
+                'createOrder': True,
+                'createMarketOrder': False,
+                'createLimitOrder': False,
+            }
+        ),
+    )
+    assert OrderType.MARKET in generic.capabilities.order_types
+    assert OrderType.LIMIT in generic.capabilities.order_types
+
+
 def test_an_unsupported_order_type_is_refused_before_it_is_sent():
     plain = CcxtVenue(
         'fake',

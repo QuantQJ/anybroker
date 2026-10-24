@@ -78,7 +78,30 @@ def test_env_is_required_to_open_anything():
         open_venue('ibkr')
 
 
-def test_available_reports_what_is_installed():
+def test_available_reports_only_the_drivers_that_import():
+    """A readiness check, not a catalogue: a venue with no driver is not listed."""
     report = available()
-    assert report['native'] == list(NATIVE_VENUES)
-    assert 'crypto' in report.get('ccxt_error', '') or report['ccxt']
+    assert set(report['all_native']) == set(NATIVE_VENUES)
+    assert set(report['native']).isdisjoint(report['native_missing'])
+    assert set(report['native']) | set(report['native_missing']) == set(NATIVE_VENUES)
+    for hint in report['native_missing'].values():
+        assert 'pip install' in hint
+
+
+def test_a_missing_driver_is_reported_with_how_to_get_it(monkeypatch):
+    import importlib.util
+    import sys
+
+    real = importlib.util.find_spec
+
+    def nothing_installed(name, *a, **kw):
+        if name in ('ib_insync', 'tradovate_client', 'alpaca'):
+            return None
+        return real(name, *a, **kw)
+
+    monkeypatch.setattr(importlib.util, 'find_spec', nothing_installed)
+    monkeypatch.setitem(sys.modules, 'ccxt', None)
+    report = available()
+    assert report['native'] == []
+    assert set(report['native_missing']) == set(NATIVE_VENUES)
+    assert 'pip install' in report['missing_ccxt']

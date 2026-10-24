@@ -292,7 +292,14 @@ class Venue:
         )
 
     def _live_order(self, submission) -> Any:
-        """Read the venue's own state for a recorded submission."""
+        """Read the venue's own state for a recorded submission.
+
+        If the venue cannot be reached, or returns nothing for the id, this
+        falls back to the order object recorded when it was sent. That keeps a
+        duplicate check from turning a network blip into a second order, but
+        it means the returned state is not guaranteed fresh -- the caller sees
+        the last known state, not necessarily the current one.
+        """
         if not submission.order_id:
             return submission.order
         try:

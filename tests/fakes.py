@@ -122,7 +122,13 @@ class FakeCcxt:
         self, exchange_id='fake', *, has=None, sandbox=True, positions=(), orders=()
     ):
         self.id = exchange_id
+        # All 104 real ccxt exchanges report createOrder, and all report
+        # createLimitOrder; 10 omit createMarketOrder. The fake mirrors that
+        # so capability derivation is tested against a realistic table.
         self.has = {
+            'createOrder': True,
+            'createMarketOrder': True,
+            'createLimitOrder': True,
             'fetchTicker': True,
             'fetchPositions': True,
             'createStopOrder': True,

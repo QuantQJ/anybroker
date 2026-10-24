@@ -47,17 +47,44 @@ def open_venue(name, env, **kw) -> "Venue":
     return CcxtVenue(key, env, **kw)
 
 
+#: Each native venue and the import it needs.
+NATIVE_DRIVERS = {
+    'ibkr': ('ib_insync', 'anybroker[ibkr]'),
+    'tradovate': ('tradovate_client', 'anybroker[tradovate]'),
+    'alpaca': ('alpaca', 'anybroker[alpaca]'),
+}
+
+
 def available() -> dict:
-    """What can be opened here, given what is installed."""
-    out = {'native': list(NATIVE_VENUES), 'ccxt': [], 'note': CCXT_ONLY_NOTE}
+    """What can actually be opened here, given what is installed.
+
+    ``native`` lists only the venues whose driver imports. A venue whose
+    driver is missing appears in ``missing`` with the extra that supplies it,
+    so this is a readiness check rather than a catalogue.
+    """
+    import importlib.util
+
+    native, missing = [], {}
+    for name, (module, extra) in sorted(NATIVE_DRIVERS.items()):
+        try:
+            found = importlib.util.find_spec(module) is not None
+        except (ImportError, ValueError):
+            found = False
+        if found:
+            native.append(name)
+        else:
+            missing[name] = 'pip install "%s"' % extra
+    out = {
+        'native': native,
+        'native_missing': missing,
+        'all_native': sorted(NATIVE_DRIVERS),
+        'ccxt': [],
+        'note': CCXT_ONLY_NOTE,
+    }
     try:
         import ccxt
 
         out['ccxt'] = sorted(ccxt.exchanges)
     except ImportError:
-        out['ccxt_error'] = 'ccxt is not installed; pip install "anybroker[crypto]"'
-    try:
-        import ib_insync  # noqa: F401
-    except ImportError:
-        out['ibkr_error'] = 'ib_insync is not installed; pip install "anybroker[ibkr]"'
+        out['missing_ccxt'] = 'pip install "anybroker[crypto]"'
     return out
