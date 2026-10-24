@@ -7,7 +7,7 @@ name = "anybroker"
 version = "0.1.0"
 description = "One interface over the brokers you actually trade: ccxt for crypto, native venues for the futures and retail brokers ccxt has never had."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { file = "LICENSE" }
 authors = [{ name = "QuantQJ" }]
 keywords = ["trading", "broker", "futures", "ibkr", "tradovate", "ccxt", "orders"]
@@ -17,6 +17,10 @@ classifiers = [
   "Intended Audience :: Financial and Insurance Industry",
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3 :: Only",
   "Topic :: Office/Business :: Financial :: Investment",
 ]
@@ -28,7 +32,15 @@ ibkr = ["ib_insync>=0.9.86"]
 tradovate = ["tradovate-client>=0.1.0"]
 alpaca = ["alpaca-py>=0.33"]
 all = ["ccxt>=4.4.0", "ib_insync>=0.9.86", "alpaca-py>=0.33"]
-dev = ["pytest>=7.4", "mypy>=1.8", "ruff>=0.6", "alpaca-py>=0.33"]
+dev = [
+  "pytest>=7.4",
+  "mypy>=1.8",
+  "ruff>=0.6",
+  # every venue SDK, so CI runs the tests that assert real payloads
+  "ccxt>=4.4.0",
+  "ib_insync>=0.9.86",
+  "alpaca-py>=0.33",
+]
 
 [project.urls]
 Homepage = "https://github.com/QuantQJ/anybroker"
@@ -44,7 +56,7 @@ pythonpath = ["src", "tests"]
 
 [tool.ruff]
 line-length = 88
-target-version = "py39"
+target-version = "py310"
 src = ["src", "tests"]
 
 [tool.ruff.format]
@@ -57,8 +69,6 @@ select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "RET", "ARG", "PTH"]
 ignore = [
   "E501",    # line length is ruff-format's business
   "UP031",   # percent formatting is the house style and is correct for logging
-  "UP006",   # keep typing-compatible generics for 3.9
-  "UP007",
   "ARG002",  # unused arguments are part of an interface a subclass fills in
   "ARG003",
   "B008",
@@ -72,7 +82,7 @@ ignore = [
 "tests/*" = ["B018", "ARG005", "PTH101", "ARG001", "SIM117", "B011"]
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.10"
 ignore_missing_imports = true
 warn_unused_ignores = true
 warn_redundant_casts = true

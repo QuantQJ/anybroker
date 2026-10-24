@@ -297,10 +297,9 @@ pip install "anybroker[alpaca]"        # + alpaca-py
 pip install "anybroker[all]"
 ```
 
-The interface runs on Python 3.9 through 3.13, which is what CI tests. One
-caveat: `ib_insync` does not import on 3.14 — its `eventkit` dependency fails
-there — so the `[ibkr]` extra is capped at 3.13 until that is fixed upstream.
-The other venues are unaffected.
+Python 3.10 through 3.13, which is what CI tests. `ccxt` and `alpaca-py` both
+require 3.10, and `ib_insync` does not import on 3.14 — its `eventkit`
+dependency fails there — so 3.10 to 3.13 is the real window.
 
 ```python
 from anybroker import available

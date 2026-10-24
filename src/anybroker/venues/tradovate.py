@@ -236,7 +236,9 @@ class TradovateVenue(Venue):
                 status='staged',
                 raw={'leg': leg},
             )
-            for c, leg in zip(spec.child_specs(), legs)
+            # strict: legs were built from these specs, so a length mismatch
+            # would mean a bracket leg went missing. Fail loudly, not quietly.
+            for c, leg in zip(spec.child_specs(), legs, strict=True)
         ]
         return order
 
