@@ -16,7 +16,7 @@ from .venue import Venue
 __all__ = ['open_venue', 'available', 'NATIVE_VENUES', 'CCXT_ONLY_NOTE']
 
 #: Venues this library implements itself, because ccxt has never had them.
-NATIVE_VENUES = ('ibkr', 'tradovate')
+NATIVE_VENUES = ('ibkr', 'tradovate', 'alpaca')
 
 CCXT_ONLY_NOTE = (
     'ccxt covers crypto exchanges only. It has no Tradovate, IBKR, Tradier, '
@@ -36,6 +36,12 @@ def open_venue(name, env, **kw) -> "Venue":
         from .venues.tradovate import TradovateVenue
 
         return TradovateVenue(env, **kw)
+    if key in ('alpaca', 'alpaca-equities'):
+        # ccxt's `alpaca` is Alpaca's crypto API. This is the stocks and
+        # options side, which ccxt has never covered.
+        from .venues.alpaca import AlpacaVenue
+
+        return AlpacaVenue(env, **kw)
     from .venues.ccxt_venue import CcxtVenue
 
     return CcxtVenue(key, env, **kw)

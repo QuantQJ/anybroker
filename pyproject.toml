@@ -26,8 +26,9 @@ dependencies = []
 crypto = ["ccxt>=4.4.0"]
 ibkr = ["ib_insync>=0.9.86"]
 tradovate = ["tradovate-client>=0.1.0"]
-all = ["ccxt>=4.4.0", "ib_insync>=0.9.86"]
-dev = ["pytest>=7.4", "mypy>=1.8", "ruff>=0.6"]
+alpaca = ["alpaca-py>=0.33"]
+all = ["ccxt>=4.4.0", "ib_insync>=0.9.86", "alpaca-py>=0.33"]
+dev = ["pytest>=7.4", "mypy>=1.8", "ruff>=0.6", "alpaca-py>=0.33"]
 
 [project.urls]
 Homepage = "https://github.com/QuantQJ/anybroker"
@@ -68,7 +69,7 @@ ignore = [
 # B018/ARG005: a test that accesses a property inside pytest.raises IS the
 # assertion -- the "useless expression" is the thing under test.
 # PTH101: chmod on a temp file in a fixture needs no pathlib ceremony.
-"tests/*" = ["B018", "ARG005", "ARG001", "SIM117", "B011"]
+"tests/*" = ["B018", "ARG005", "PTH101", "ARG001", "SIM117", "B011"]
 
 [tool.mypy]
 python_version = "3.9"

@@ -4,7 +4,7 @@ with none of them installed.
 
 from typing import Any
 
-__all__ = ['CcxtVenue', 'IbkrVenue', 'TradovateVenue']
+__all__ = ['AlpacaVenue', 'CcxtVenue', 'IbkrVenue', 'TradovateVenue']
 
 
 def __getattr__(name) -> Any:
@@ -20,4 +20,8 @@ def __getattr__(name) -> Any:
         from .tradovate import TradovateVenue
 
         return TradovateVenue
+    if name == 'AlpacaVenue':
+        from .alpaca import AlpacaVenue
+
+        return AlpacaVenue
     raise AttributeError(name)

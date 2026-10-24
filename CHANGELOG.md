@@ -63,5 +63,24 @@ First cut. One interface, two kinds of venue.
   the registry so a restarted process is not blind; anything restored from it
   is marked unresolved, because this process never saw IB confirm it.
 
-Not here yet: Alpaca equities (ccxt's Alpaca is the crypto side only),
-Tradier, TradeStation, market data beyond a single quote.
+- `AlpacaVenue` -- the third native venue. ccxt's `alpaca` is Alpaca's crypto
+  API; this is the stocks and options side, which nothing else covers. Built
+  on `alpaca-py`, so the order types, times in force, order classes and
+  request models come from the vendor's own package, read from the installed
+  SDK rather than assumed.
+  - Idempotency is Alpaca's as well as ours: `client_order_id` is passed
+    through because Alpaca enforces uniqueness on it, and its duplicate
+    rejection (code 40010001) becomes `DuplicateOrderError` carrying the order
+    it already has, looked up by that id.
+  - Brackets are one request -- `order_class` with `take_profit` and
+    `stop_loss` on the entry. Two children is a bracket, one is a
+    one-triggers-other.
+  - Both trailing forms work, unlike Tradovate: `trail_price` and
+    `trail_percent`.
+  - A trailing stop-limit and good-til-date are refused with an explanation
+    rather than substituted; `opg` and `cls` reach through `extra`.
+- `Order.is_working` and `is_done` now compare on a flattened status, so a
+  venue's spelling never decides whether an order counts as live:
+  `partially_filled`, `PreSubmitted` and `open` all mean the same thing.
+
+Not here yet: Tradier, TradeStation, market data beyond a single quote.

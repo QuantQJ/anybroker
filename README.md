@@ -30,7 +30,7 @@ venues, and they are the reason it exists.
 ```
 anybroker
 ├── ccxt            → 104 crypto exchanges, somebody else's problem
-└── native venues   → IBKR, Tradovate  (Alpaca equities, Tradier next)
+└── native venues   → IBKR, Tradovate, Alpaca   (Tradier, TradeStation next)
 ```
 
 ```python
@@ -42,6 +42,23 @@ tv.place(OrderSpec("MNQZ6", Side.BUY, 2, take_profit=20200.0, stop_loss=20050.0)
 Tradovate's paper environment is a different host with different credentials,
 so a venue built for paper has no route to the live book — not because a flag
 says so, but because it is a different server.
+
+```python
+al = open_venue("alpaca", Env.PAPER, api_key="...", secret_key="...")
+al.limit("AAPL", Side.BUY, 10, 227.50)
+al.place(OrderSpec("AAPL", Side.BUY, 10, take_profit=240.0, stop_loss=220.0))
+```
+
+**Alpaca enforces idempotency itself.** `client_order_id` is unique server
+side, so passing yours through means the broker's own guarantee backs up the
+one in `place()` — and when Alpaca refuses a repeat (error code `40010001`),
+you get the same `DuplicateOrderError`, carrying the order it already has.
+
+Two things Alpaca cannot do, refused rather than substituted: a trailing
+*stop-limit*, and good-til-date. It has `opg` and `cls` instead — at the open
+and at the close — which this library has no neutral word for, so they go
+through `extra`. Note that ccxt's `alpaca` is Alpaca's **crypto** API; this
+venue is the stocks and options side, which ccxt has never covered.
 
 ## Paper and live are different destinations
 
@@ -276,8 +293,14 @@ is not a rejection.
 pip install anybroker                  # the interface, no dependencies
 pip install "anybroker[crypto]"        # + ccxt
 pip install "anybroker[ibkr]"          # + ib_insync
+pip install "anybroker[alpaca]"        # + alpaca-py
 pip install "anybroker[all]"
 ```
+
+The interface runs on Python 3.9 through 3.13, which is what CI tests. One
+caveat: `ib_insync` does not import on 3.14 — its `eventkit` dependency fails
+there — so the `[ibkr]` extra is capped at 3.13 until that is fixed upstream.
+The other venues are unaffected.
 
 ```python
 from anybroker import available
@@ -296,7 +319,6 @@ Fake IB and fake ccxt. No network, no credentials, no gateway, no account.
 
 ## Not here yet
 
-- Alpaca equities (ccxt's Alpaca is the crypto side only)
 - Tradier, TradeStation
 - Market data beyond a single quote
 

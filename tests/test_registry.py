@@ -46,8 +46,16 @@ def test_tradovate_resolves_to_the_native_venue():
     assert open_venue('tv', Env.LIVE, client=object()).name == 'tradovate'
 
 
-def test_both_futures_brokers_are_native():
-    assert set(NATIVE_VENUES) == {'ibkr', 'tradovate'}
+def test_the_venues_ccxt_has_never_had_are_native():
+    assert set(NATIVE_VENUES) == {'ibkr', 'tradovate', 'alpaca'}
+
+
+def test_alpaca_resolves_to_the_equities_venue():
+    """ccxt's `alpaca` is the crypto API; this is the stocks side."""
+    from anybroker.venues.alpaca import AlpacaVenue
+
+    v = open_venue('alpaca', Env.PAPER, api_key='k', secret_key='s')
+    assert isinstance(v, AlpacaVenue)
 
 
 def test_the_message_names_the_native_venues_so_you_know_where_to_look(monkeypatch):

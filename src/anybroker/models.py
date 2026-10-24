@@ -62,22 +62,39 @@ class Order:
     raw: dict = field(default_factory=dict, repr=False)
 
     @property
+    def _state(self) -> str:
+        """The status with punctuation removed.
+
+        Venues spell the same state differently -- IB says ``PreSubmitted``,
+        Alpaca says ``partially_filled``, ccxt says ``open``. Comparing on a
+        flattened form means a venue's spelling never decides whether an order
+        counts as live.
+        """
+        return self.status.lower().replace('_', '').replace(' ', '')
+
+    @property
     def is_working(self) -> bool:
-        return self.status.lower() in (
+        return self._state in (
             'working',
             'open',
             'submitted',
             'presubmitted',
             'pendingsubmit',
             'pendingnew',
+            'pendingcancel',
+            'pendingreplace',
+            'pendingreview',
             'accepted',
+            'acceptedforbidding',
             'new',
             'partiallyfilled',
+            'held',
+            'calculated',
         )
 
     @property
     def is_done(self) -> bool:
-        return self.status.lower() in (
+        return self._state in (
             'filled',
             'cancelled',
             'canceled',
@@ -86,6 +103,9 @@ class Order:
             'closed',
             'apicancelled',
             'inactive',
+            'doneforday',
+            'replaced',
+            'stopped',
         )
 
 
