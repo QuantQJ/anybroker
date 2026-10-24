@@ -2,12 +2,13 @@
 
 import types
 
-
 # ── a fake ib_insync IB ─────────────────────────────────────────────────────
 
+
 class FakeOrderStatus:
-    def __init__(self, status='PreSubmitted', filled=0.0, avgFillPrice=0.0,
-                 whyHeld=None):
+    def __init__(
+        self, status='PreSubmitted', filled=0.0, avgFillPrice=0.0, whyHeld=None
+    ):
         self.status = status
         self.filled = filled
         self.avgFillPrice = avgFillPrice
@@ -44,8 +45,12 @@ class FakeIB:
     # lifecycle
     def connect(self, host, port, clientId=None, timeout=None):
         self.connected = True
-        self.connect_args = {'host': host, 'port': port, 'clientId': clientId,
-                             'timeout': timeout}
+        self.connect_args = {
+            'host': host,
+            'port': port,
+            'clientId': clientId,
+            'timeout': timeout,
+        }
 
     def disconnect(self):
         self.connected = False
@@ -61,10 +66,17 @@ class FakeIB:
         return list(self._accounts)
 
     def accountValues(self, account=None):
-        row = lambda tag, value: types.SimpleNamespace(
-            tag=tag, value=value, currency='USD', account=account)
-        return [row('TotalCashValue', '50000'), row('NetLiquidation', '50250'),
-                row('UnrealizedPnL', '250'), row('RealizedPnL', '-10')]
+        def row(tag, value):
+            return types.SimpleNamespace(
+                tag=tag, value=value, currency='USD', account=account
+            )
+
+        return [
+            row('TotalCashValue', '50000'),
+            row('NetLiquidation', '50250'),
+            row('UnrealizedPnL', '250'),
+            row('RealizedPnL', '-10'),
+        ]
 
     def positions(self, account=None):
         return list(self._positions)
@@ -87,8 +99,9 @@ class FakeIB:
             self._next_id += 1
         trade = FakeTrade(order, contract)
         self.placed.append(trade)
-        self._trades = [t for t in self._trades
-                        if t.order.orderId != order.orderId] + [trade]
+        self._trades = [t for t in self._trades if t.order.orderId != order.orderId] + [
+            trade
+        ]
         return trade
 
     def cancelOrder(self, order):
@@ -96,18 +109,25 @@ class FakeIB:
 
 
 def fake_position(symbol, qty, avg=0.0, account='DU111'):
-    return types.SimpleNamespace(contract=FakeContract(symbol), position=qty,
-                                 avgCost=avg, account=account)
+    return types.SimpleNamespace(
+        contract=FakeContract(symbol), position=qty, avgCost=avg, account=account
+    )
 
 
 # ── a fake ccxt exchange ────────────────────────────────────────────────────
 
+
 class FakeCcxt:
-    def __init__(self, exchange_id='fake', *, has=None, sandbox=True,
-                 positions=(), orders=()):
+    def __init__(
+        self, exchange_id='fake', *, has=None, sandbox=True, positions=(), orders=()
+    ):
         self.id = exchange_id
-        self.has = {'fetchTicker': True, 'fetchPositions': True,
-                    'createStopOrder': True, 'editOrder': True}
+        self.has = {
+            'fetchTicker': True,
+            'fetchPositions': True,
+            'createStopOrder': True,
+            'editOrder': True,
+        }
         if has is not None:
             self.has.update(has)
         self.urls = {'test': 'https://sandbox.example'} if sandbox else {}
@@ -141,18 +161,37 @@ class FakeCcxt:
         return {'bid': 60000.0, 'ask': 60010.0, 'last': 60005.0}
 
     def create_order(self, symbol, type_, side, amount, price=None, params=None):
-        call = {'symbol': symbol, 'type': type_, 'side': side,
-                'amount': amount, 'price': price, 'params': dict(params or {})}
+        call = {
+            'symbol': symbol,
+            'type': type_,
+            'side': side,
+            'amount': amount,
+            'price': price,
+            'params': dict(params or {}),
+        }
         self.created.append(call)
-        return {'id': 'x%d' % len(self.created), 'symbol': symbol,
-                'type': type_, 'side': side, 'amount': amount, 'price': price,
-                'status': 'open', 'filled': 0.0}
+        return {
+            'id': 'x%d' % len(self.created),
+            'symbol': symbol,
+            'type': type_,
+            'side': side,
+            'amount': amount,
+            'price': price,
+            'status': 'open',
+            'filled': 0.0,
+        }
 
     def cancel_order(self, order_id, symbol=None):
         self.cancelled.append(order_id)
         return {'id': order_id, 'status': 'canceled'}
 
-    def edit_order(self, order_id, symbol=None, type_=None, side=None,
-                   amount=None, price=None):
-        return {'id': order_id, 'symbol': symbol, 'amount': amount,
-                'price': price, 'status': 'open'}
+    def edit_order(
+        self, order_id, symbol=None, type_=None, side=None, amount=None, price=None
+    ):
+        return {
+            'id': order_id,
+            'symbol': symbol,
+            'amount': amount,
+            'price': price,
+            'status': 'open',
+        }

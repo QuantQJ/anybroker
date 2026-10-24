@@ -1,20 +1,28 @@
 """Exceptions. Every failure raises; nothing returns an error dictionary."""
 
-__all__ = ['BrokerError', 'ConfigError', 'UnsupportedError', 'NotFoundError',
-           'TransportError', 'AuthError', 'ThrottledError', 'RejectedError',
-           'WrongDestinationError']
+__all__ = [
+    'BrokerError',
+    'ConfigError',
+    'UnsupportedError',
+    'NotFoundError',
+    'TransportError',
+    'AuthError',
+    'ThrottledError',
+    'RejectedError',
+    'WrongDestinationError',
+]
 
 
 class BrokerError(Exception):
     """Base class."""
 
-    def __init__(self, message, *, venue=None, detail=None):
+    def __init__(self, message, *, venue=None, detail=None) -> None:
         super().__init__(message)
         self.message = message
         self.venue = venue
         self.detail = detail
 
-    def __str__(self):
+    def __str__(self) -> str:
         bits = [self.message]
         if self.venue:
             bits.append('venue=%s' % self.venue)
@@ -47,7 +55,7 @@ class AuthError(BrokerError):
 class ThrottledError(BrokerError):
     """Rate limited."""
 
-    def __init__(self, message, *, retry_after=None, **kw):
+    def __init__(self, message, *, retry_after=None, **kw) -> None:
         super().__init__(message, **kw)
         self.retry_after = retry_after
 
@@ -69,7 +77,7 @@ class WrongDestinationError(BrokerError):
     right.
     """
 
-    def __init__(self, message, *, asked=None, accounts=None, port=None, **kw):
+    def __init__(self, message, *, asked=None, accounts=None, port=None, **kw) -> None:
         super().__init__(message, **kw)
         self.asked = asked
         self.accounts = list(accounts or [])
@@ -84,6 +92,6 @@ class TransportError(BrokerError):
     order and position state before sending anything else.
     """
 
-    def __init__(self, message, *, ambiguous=False, **kw):
+    def __init__(self, message, *, ambiguous=False, **kw) -> None:
         super().__init__(message, **kw)
         self.ambiguous = ambiguous

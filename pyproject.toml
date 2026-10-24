@@ -27,7 +27,7 @@ crypto = ["ccxt>=4.4.0"]
 ibkr = ["ib_insync>=0.9.86"]
 tradovate = ["tradovate-client>=0.1.0"]
 all = ["ccxt>=4.4.0", "ib_insync>=0.9.86"]
-dev = ["pytest>=7.4"]
+dev = ["pytest>=7.4", "mypy>=1.8", "ruff>=0.6"]
 
 [project.urls]
 Homepage = "https://github.com/QuantQJ/anybroker"
@@ -40,3 +40,40 @@ packages = ["src/anybroker"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src", "tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+src = ["src", "tests"]
+
+[tool.ruff.format]
+# Keep the quote style the code already uses; reformatting every string buys
+# nothing and makes the history unreadable.
+quote-style = "preserve"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "RET", "ARG", "PTH"]
+ignore = [
+  "E501",    # line length is ruff-format's business
+  "UP031",   # percent formatting is the house style and is correct for logging
+  "UP006",   # keep typing-compatible generics for 3.9
+  "UP007",
+  "ARG002",  # unused arguments are part of an interface a subclass fills in
+  "ARG003",
+  "B008",
+  "SIM105",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# B018/ARG005: a test that accesses a property inside pytest.raises IS the
+# assertion -- the "useless expression" is the thing under test.
+# PTH101: chmod on a temp file in a fixture needs no pathlib ceremony.
+"tests/*" = ["B018", "ARG005", "ARG001", "SIM117", "B011"]
+
+[tool.mypy]
+python_version = "3.9"
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+files = ["src"]

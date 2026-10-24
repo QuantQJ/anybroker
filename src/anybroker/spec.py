@@ -8,6 +8,8 @@ Nothing in here invents a price. ``take_profit`` and ``stop_loss`` are the
 caller's own numbers or they are absent.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 
 from .enums import OrderType, Side, TimeInForce
@@ -16,8 +18,9 @@ from .errors import ConfigError
 __all__ = ['OrderSpec', 'NEEDS_LIMIT', 'NEEDS_STOP', 'NEEDS_TRAIL']
 
 #: Order types that cannot be sent without a limit price.
-NEEDS_LIMIT = frozenset({OrderType.LIMIT, OrderType.STOP_LIMIT,
-                         OrderType.TRAILING_STOP_LIMIT})
+NEEDS_LIMIT = frozenset(
+    {OrderType.LIMIT, OrderType.STOP_LIMIT, OrderType.TRAILING_STOP_LIMIT}
+)
 
 #: Order types that cannot be sent without a stop price.
 NEEDS_STOP = frozenset({OrderType.STOP, OrderType.STOP_LIMIT})
@@ -42,26 +45,26 @@ class OrderSpec:
     side: Side
     qty: float
     order_type: OrderType = OrderType.MARKET
-    limit_price: 'float | None' = None
-    stop_price: 'float | None' = None
-    trail_amount: 'float | None' = None
-    trail_percent: 'float | None' = None
+    limit_price: float | None = None
+    stop_price: float | None = None
+    trail_amount: float | None = None
+    trail_percent: float | None = None
     time_in_force: TimeInForce = TimeInForce.DAY
-    good_til: 'str | None' = None
-    take_profit: 'float | None' = None
-    stop_loss: 'float | None' = None
+    good_til: str | None = None
+    take_profit: float | None = None
+    stop_loss: float | None = None
     reduce_only: bool = False
-    client_order_id: 'str | None' = None
-    label: 'str | None' = None
+    client_order_id: str | None = None
+    label: str | None = None
     extra: dict = field(default_factory=dict)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.side = Side(self.side)
         self.order_type = OrderType(self.order_type)
         self.time_in_force = TimeInForce(self.time_in_force)
         self.validate()
 
-    def validate(self):
+    def validate(self) -> OrderSpec:
         if not self.symbol:
             raise ConfigError('symbol is required')
         if self.qty is None or float(self.qty) <= 0:
@@ -71,7 +74,11 @@ class OrderSpec:
             raise ConfigError('%s needs limit_price' % t.value)
         if t in NEEDS_STOP and self.stop_price is None:
             raise ConfigError('%s needs stop_price' % t.value)
-        if t in NEEDS_TRAIL and self.trail_amount is None and self.trail_percent is None:
+        if (
+            t in NEEDS_TRAIL
+            and self.trail_amount is None
+            and self.trail_percent is None
+        ):
             raise ConfigError('%s needs trail_amount or trail_percent' % t.value)
         if t is OrderType.MARKET and self.limit_price is not None:
             raise ConfigError('a market order carries no limit_price')
@@ -89,17 +96,33 @@ class OrderSpec:
     def exit_side(self) -> Side:
         return self.side.opposite
 
-    def child_specs(self):
+    def child_specs(self) -> list[OrderSpec]:
         """The protective children this spec implies, on the opposite side."""
         out = []
         if self.take_profit is not None:
-            out.append(OrderSpec(self.symbol, self.exit_side, self.qty,
-                                 OrderType.LIMIT, limit_price=self.take_profit,
-                                 time_in_force=self.time_in_force,
-                                 reduce_only=True, label='take_profit'))
+            out.append(
+                OrderSpec(
+                    self.symbol,
+                    self.exit_side,
+                    self.qty,
+                    OrderType.LIMIT,
+                    limit_price=self.take_profit,
+                    time_in_force=self.time_in_force,
+                    reduce_only=True,
+                    label='take_profit',
+                )
+            )
         if self.stop_loss is not None:
-            out.append(OrderSpec(self.symbol, self.exit_side, self.qty,
-                                 OrderType.STOP, stop_price=self.stop_loss,
-                                 time_in_force=self.time_in_force,
-                                 reduce_only=True, label='stop_loss'))
+            out.append(
+                OrderSpec(
+                    self.symbol,
+                    self.exit_side,
+                    self.qty,
+                    OrderType.STOP,
+                    stop_price=self.stop_loss,
+                    time_in_force=self.time_in_force,
+                    reduce_only=True,
+                    label='stop_loss',
+                )
+            )
         return out

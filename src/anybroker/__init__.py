@@ -20,9 +20,17 @@ the order to the live book.
 """
 
 from .enums import Env, OrderType, Side, TimeInForce
-from .errors import (AuthError, BrokerError, ConfigError, NotFoundError,
-                     RejectedError, ThrottledError, TransportError,
-                     UnsupportedError, WrongDestinationError)
+from .errors import (
+    AuthError,
+    BrokerError,
+    ConfigError,
+    NotFoundError,
+    RejectedError,
+    ThrottledError,
+    TransportError,
+    UnsupportedError,
+    WrongDestinationError,
+)
 from .models import Account, Fill, Order, Position, Quote
 from .registry import available, open_venue
 from .spec import OrderSpec
@@ -31,12 +39,28 @@ from .venue import Capabilities, Venue
 __version__ = '0.1.0'
 
 __all__ = [
-    'open_venue', 'available',
-    'Env', 'Side', 'OrderType', 'TimeInForce',
-    'OrderSpec', 'Venue', 'Capabilities',
-    'Account', 'Position', 'Order', 'Fill', 'Quote',
-    'BrokerError', 'ConfigError', 'UnsupportedError', 'NotFoundError',
-    'AuthError', 'ThrottledError', 'RejectedError', 'TransportError',
+    'open_venue',
+    'available',
+    'Env',
+    'Side',
+    'OrderType',
+    'TimeInForce',
+    'OrderSpec',
+    'Venue',
+    'Capabilities',
+    'Account',
+    'Position',
+    'Order',
+    'Fill',
+    'Quote',
+    'BrokerError',
+    'ConfigError',
+    'UnsupportedError',
+    'NotFoundError',
+    'AuthError',
+    'ThrottledError',
+    'RejectedError',
+    'TransportError',
     'WrongDestinationError',
     '__version__',
 ]

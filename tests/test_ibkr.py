@@ -2,11 +2,21 @@
 
 import pytest
 
-from anybroker import (ConfigError, Env, NotFoundError, OrderSpec, OrderType,
-                       Side, UnsupportedError, WrongDestinationError)
-from anybroker.venues.ibkr import (IBKR_DOCUMENTED_GATEWAY,
-                                   IBKR_DOCUMENTED_TWS, IbkrVenue,
-                                   looks_like_paper)
+from anybroker import (
+    ConfigError,
+    Env,
+    NotFoundError,
+    OrderSpec,
+    Side,
+    UnsupportedError,
+    WrongDestinationError,
+)
+from anybroker.venues.ibkr import (
+    IBKR_DOCUMENTED_GATEWAY,
+    IBKR_DOCUMENTED_TWS,
+    IbkrVenue,
+    looks_like_paper,
+)
 from fakes import FakeIB, fake_position
 
 #: Accounts IB would hand back, by kind. QJ's own are U1234567 (live) and
@@ -23,13 +33,13 @@ def venue(env=Env.PAPER, **kw):
         accounts = LIVE_ACCOUNTS if Env(env) is Env.LIVE else PAPER_ACCOUNTS
     ib = kw.pop('ib', None) or FakeIB(accounts=accounts, **fake_kw)
     port = kw.pop('port', IBKR_DOCUMENTED_GATEWAY[Env(env)])
-    v = IbkrVenue(Env(env), client_id=kw.pop('client_id', 7788), port=port,
-                  ib=ib, **kw)
+    v = IbkrVenue(Env(env), client_id=kw.pop('client_id', 7788), port=port, ib=ib, **kw)
     v.connect()
     return v
 
 
 # ── the client-id hazard ────────────────────────────────────────────────────
+
 
 def test_client_id_is_required():
     """IB kicks off an existing session on a duplicate id, so no default."""
@@ -43,6 +53,7 @@ def test_the_client_id_reaches_the_connection():
 
 
 # ── destination: the port is not guessed, and the account is read back ─────
+
 
 def test_port_is_required_because_installations_disagree():
     """IBKR documents gateway live 4001 / paper 4002. QJ's Studio runs live on
@@ -76,6 +87,7 @@ def test_env_is_required():
 
 
 # ── the guard that does not depend on knowing the port ─────────────────────
+
 
 def test_paper_prefixes():
     assert looks_like_paper('DU1234567') and looks_like_paper('DF12345')
@@ -126,13 +138,13 @@ def test_a_requested_account_the_gateway_does_not_have_refuses():
 
 def test_verification_can_be_switched_off_deliberately():
     ib = FakeIB(accounts=LIVE_ACCOUNTS)
-    v = IbkrVenue(Env.PAPER, client_id=1, port=4002, ib=ib,
-                  verify_destination=False)
+    v = IbkrVenue(Env.PAPER, client_id=1, port=4002, ib=ib, verify_destination=False)
     v.connect()
     assert ib.connected, 'opting out is allowed, but it has to be explicit'
 
 
 # ── order translation ───────────────────────────────────────────────────────
+
 
 def test_a_market_order_becomes_MKT():
     v = venue()
@@ -197,10 +209,12 @@ def test_reduce_only_is_refused_rather_than_ignored():
 
 # ── brackets: nothing works at the exchange until the group is staged ──────
 
+
 def test_a_bracket_stages_the_parent_held_and_releases_on_the_last_child():
     v = venue()
-    result = v.place(OrderSpec('MNQZ6', Side.BUY, 2, take_profit=20200.0,
-                               stop_loss=20050.0))
+    result = v.place(
+        OrderSpec('MNQZ6', Side.BUY, 2, take_profit=20200.0, stop_loss=20050.0)
+    )
     placed = v._ib.placed
     assert len(placed) == 3
     parent, target, stop = [t.order for t in placed]
@@ -212,8 +226,7 @@ def test_a_bracket_stages_the_parent_held_and_releases_on_the_last_child():
 
 def test_bracket_children_are_linked_to_the_parent_and_to_each_other():
     v = venue()
-    v.place(OrderSpec('MNQZ6', Side.BUY, 1, take_profit=20200.0,
-                      stop_loss=20050.0))
+    v.place(OrderSpec('MNQZ6', Side.BUY, 1, take_profit=20200.0, stop_loss=20050.0))
     parent, target, stop = [t.order for t in v._ib.placed]
     assert target.parentId == parent.orderId
     assert stop.parentId == parent.orderId
@@ -223,8 +236,7 @@ def test_bracket_children_are_linked_to_the_parent_and_to_each_other():
 
 def test_bracket_children_are_the_opposite_side_and_the_right_types():
     v = venue()
-    v.place(OrderSpec('MNQZ6', Side.BUY, 3, take_profit=20200.0,
-                      stop_loss=20050.0))
+    v.place(OrderSpec('MNQZ6', Side.BUY, 3, take_profit=20200.0, stop_loss=20050.0))
     _, target, stop = [t.order for t in v._ib.placed]
     assert target.action == 'SELL' and target.orderType == 'LMT'
     assert target.lmtPrice == 20200.0 and target.totalQuantity == 3
@@ -241,9 +253,14 @@ def test_a_stop_only_bracket_releases_on_its_single_child():
 
 # ── reads ───────────────────────────────────────────────────────────────────
 
+
 def test_positions_are_normalised():
-    v = venue(positions=[fake_position('MNQZ6', 2, 20100.0),
-                         fake_position('MESZ6', -1, 5800.0)])
+    v = venue(
+        positions=[
+            fake_position('MNQZ6', 2, 20100.0),
+            fake_position('MESZ6', -1, 5800.0),
+        ]
+    )
     held = {p.symbol: p for p in v.list_positions()}
     assert held['MNQZ6'].qty == 2 and held['MNQZ6'].side is Side.BUY
     assert held['MESZ6'].qty == -1 and held['MESZ6'].side is Side.SELL
@@ -269,13 +286,19 @@ def test_several_accounts_must_be_disambiguated():
 
 def test_no_accounts_raises_once_past_verification():
     """With verification off, get_account() is still the one that complains."""
-    v = IbkrVenue(Env.PAPER, client_id=1, port=4001, ib=FakeIB(accounts=()),
-                  verify_destination=False).connect()
+    v = IbkrVenue(
+        Env.PAPER,
+        client_id=1,
+        port=4001,
+        ib=FakeIB(accounts=()),
+        verify_destination=False,
+    ).connect()
     with pytest.raises(NotFoundError, match='no managed accounts'):
         v.get_account()
 
 
 # ── cancel and flatten ──────────────────────────────────────────────────────
+
 
 def test_cancel_reaches_ib():
     v = venue()
@@ -317,8 +340,10 @@ def test_flatten_all_cancels_then_closes():
 
 # ── contracts ───────────────────────────────────────────────────────────────
 
+
 def test_an_ambiguous_symbol_is_refused_rather_than_guessed():
     from fakes import FakeContract
+
     v = venue(qualify=[FakeContract('MNQ', 'MNQZ6'), FakeContract('MNQ', 'MNQH7')])
     with pytest.raises(ConfigError, match='ambiguous'):
         v.market('MNQ', Side.BUY, 1)
@@ -332,6 +357,7 @@ def test_an_unknown_symbol_is_refused():
 
 def test_a_contract_factory_overrides_resolution():
     from fakes import FakeContract
+
     v = venue(contract_factory=lambda s: FakeContract('X', 'MNQZ6'))
     v.market('whatever', Side.BUY, 1)
     assert v._ib.placed[-1].contract.localSymbol == 'MNQZ6'

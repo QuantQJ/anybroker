@@ -17,12 +17,12 @@ def test_strings_are_coerced_to_the_enums():
     assert spec.side is Side.BUY and spec.order_type is OrderType.LIMIT
 
 
-@pytest.mark.parametrize('order_type', [OrderType.LIMIT, OrderType.STOP_LIMIT,
-                                        OrderType.TRAILING_STOP_LIMIT])
+@pytest.mark.parametrize(
+    'order_type', [OrderType.LIMIT, OrderType.STOP_LIMIT, OrderType.TRAILING_STOP_LIMIT]
+)
 def test_types_that_need_a_limit_price_say_so(order_type):
     with pytest.raises(ConfigError, match='limit_price'):
-        OrderSpec('MNQZ6', Side.BUY, 1, order_type, stop_price=1.0,
-                  trail_amount=1.0)
+        OrderSpec('MNQZ6', Side.BUY, 1, order_type, stop_price=1.0, trail_amount=1.0)
 
 
 @pytest.mark.parametrize('order_type', [OrderType.STOP, OrderType.STOP_LIMIT])
@@ -38,8 +38,14 @@ def test_a_trailing_stop_needs_a_distance():
 
 def test_a_trailing_stop_takes_one_distance_not_two():
     with pytest.raises(ConfigError, match='not both'):
-        OrderSpec('MNQZ6', Side.SELL, 1, OrderType.TRAILING_STOP,
-                  trail_amount=5.0, trail_percent=1.0)
+        OrderSpec(
+            'MNQZ6',
+            Side.SELL,
+            1,
+            OrderType.TRAILING_STOP,
+            trail_amount=5.0,
+            trail_percent=1.0,
+        )
 
 
 def test_a_market_order_carries_no_price():
@@ -65,6 +71,7 @@ def test_good_til_date_needs_a_date():
 
 # ── brackets ────────────────────────────────────────────────────────────────
 
+
 def test_children_take_the_opposite_side():
     spec = OrderSpec('MNQZ6', Side.BUY, 2, take_profit=20200.0, stop_loss=20050.0)
     assert spec.is_bracket and spec.exit_side is Side.SELL
@@ -81,8 +88,9 @@ def test_a_short_entry_brackets_with_buys():
 
 
 def test_the_target_is_a_limit_and_the_stop_is_a_stop():
-    children = OrderSpec('MNQZ6', Side.BUY, 1, take_profit=20200.0,
-                         stop_loss=20050.0).child_specs()
+    children = OrderSpec(
+        'MNQZ6', Side.BUY, 1, take_profit=20200.0, stop_loss=20050.0
+    ).child_specs()
     assert children[0].order_type is OrderType.LIMIT
     assert children[0].limit_price == 20200.0
     assert children[1].order_type is OrderType.STOP

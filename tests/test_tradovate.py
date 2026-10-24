@@ -2,10 +2,24 @@
 
 import pytest
 
-from anybroker import (ConfigError, Env, NotFoundError, OrderSpec, OrderType,
-                       RejectedError, Side, TimeInForce, UnsupportedError)
-from anybroker.venues.tradovate import (TV_ENV, TV_ORDER_TYPES, TV_SIDE, TV_TIF,
-                                        TradovateVenue)
+from anybroker import (
+    ConfigError,
+    Env,
+    NotFoundError,
+    OrderSpec,
+    OrderType,
+    RejectedError,
+    Side,
+    TimeInForce,
+    UnsupportedError,
+)
+from anybroker.venues.tradovate import (
+    TV_ENV,
+    TV_ORDER_TYPES,
+    TV_SIDE,
+    TV_TIF,
+    TradovateVenue,
+)
 
 
 class FakeTradovate:
@@ -27,14 +41,18 @@ class FakeTradovate:
     def snapshot(self, account=None):
         self._log('snapshot', account=account)
         import types
-        views = {s: types.SimpleNamespace(net_pos=q, net_price=p,
-                                          contract_id=cid, symbol=s)
-                 for s, (q, p, cid) in self._positions.items()}
+
+        views = {
+            s: types.SimpleNamespace(net_pos=q, net_price=p, contract_id=cid, symbol=s)
+            for s, (q, p, cid) in self._positions.items()
+        }
         return types.SimpleNamespace(
             account=types.SimpleNamespace(name='DEMO1234', id=7),
-            cash=types.SimpleNamespace(total_cash=50000.0, open_pnl=25.0,
-                                       realized_pnl=-10.0),
-            positions=views)
+            cash=types.SimpleNamespace(
+                total_cash=50000.0, open_pnl=25.0, realized_pnl=-10.0
+            ),
+            positions=views,
+        )
 
     def orders(self):
         self._log('orders')
@@ -93,6 +111,7 @@ def last(v, name):
 
 # ── environment ─────────────────────────────────────────────────────────────
 
+
 def test_paper_and_live_are_tradovates_two_hosts():
     assert TV_ENV == {Env.PAPER: 'demo', Env.LIVE: 'live'}
 
@@ -108,7 +127,9 @@ def test_tradovate_has_a_paper_environment():
 
 def test_the_env_reaches_the_client_library(monkeypatch):
     """Built without an injected client, the venue hands the host string over."""
-    import sys, types
+    import sys
+    import types
+
     seen = {}
 
     module = types.ModuleType('tradovate_client')
@@ -128,12 +149,14 @@ def test_the_env_reaches_the_client_library(monkeypatch):
 
 def test_a_missing_client_library_says_how_to_get_it(monkeypatch):
     import sys
+
     monkeypatch.setitem(sys.modules, 'tradovate_client', None)
     with pytest.raises(ConfigError, match='tradovate-client is not installed'):
         TradovateVenue(Env.PAPER).connect()
 
 
 # ── the published vocabulary ─────────────────────────────────────────────────
+
 
 def test_every_neutral_order_type_maps_to_a_tradovate_string():
     assert set(TV_ORDER_TYPES) == set(OrderType)
@@ -152,6 +175,7 @@ def test_sides_use_tradovates_capitalisation():
 
 
 # ── orders ──────────────────────────────────────────────────────────────────
+
 
 def test_a_market_order():
     v = venue()
@@ -202,8 +226,16 @@ def test_a_percent_trail_is_refused_rather_than_guessed():
 
 def test_time_in_force_is_passed():
     v = venue()
-    v.place(OrderSpec('MNQZ6', Side.BUY, 1, OrderType.LIMIT,
-                      limit_price=1.0, time_in_force=TimeInForce.GTC))
+    v.place(
+        OrderSpec(
+            'MNQZ6',
+            Side.BUY,
+            1,
+            OrderType.LIMIT,
+            limit_price=1.0,
+            time_in_force=TimeInForce.GTC,
+        )
+    )
     assert last(v, 'place')['kw']['time_in_force'] == 'GTC'
 
 
@@ -239,12 +271,15 @@ def test_an_account_is_passed_when_given():
 
 # ── brackets: one request, no naked entry ───────────────────────────────────
 
+
 def test_a_bracket_uses_tradovates_one_sends_other():
     v = venue()
-    order = v.place(OrderSpec('MNQZ6', Side.BUY, 2, take_profit=20200.0,
-                              stop_loss=20050.0))
-    assert not [c for c in v.client.calls if c['name'] == 'place'], \
+    order = v.place(
+        OrderSpec('MNQZ6', Side.BUY, 2, take_profit=20200.0, stop_loss=20050.0)
+    )
+    assert not [c for c in v.client.calls if c['name'] == 'place'], (
         'a bracket must not go out as a bare entry first'
+    )
     kw = last(v, 'place_oso')['kw']
     assert kw['action'] == 'Buy' and kw['order_type'] == 'Market'
     assert kw['bracket1']['action'] == 'Sell'
@@ -264,14 +299,14 @@ def test_a_stop_only_bracket_sends_one_leg():
 
 def test_a_short_entry_brackets_with_buys():
     v = venue()
-    v.place(OrderSpec('MNQZ6', Side.SELL, 1, take_profit=20000.0,
-                      stop_loss=20100.0))
+    v.place(OrderSpec('MNQZ6', Side.SELL, 1, take_profit=20000.0, stop_loss=20100.0))
     kw = last(v, 'place_oso')['kw']
     assert kw['bracket1']['action'] == 'Buy'
     assert kw['bracket2']['action'] == 'Buy'
 
 
 # ── reads ───────────────────────────────────────────────────────────────────
+
 
 def test_positions_come_back_named():
     v = venue(positions={'MNQZ6': (2, 20100.5, 11), 'MESZ6': (-1, 5800.0, 12)})
@@ -293,6 +328,7 @@ def test_orders_are_listed():
 
 
 # ── cancel and flatten ──────────────────────────────────────────────────────
+
 
 def test_cancel_reaches_the_client():
     v = venue()
@@ -323,15 +359,18 @@ def test_flatten_all_renames_liquidated_to_flattened():
 
 # ── failures ────────────────────────────────────────────────────────────────
 
+
 def test_a_refusal_in_the_reply_raises():
-    v = venue(reply={'failureReason': 'InsufficientMargin',
-                     'failureText': 'not enough'})
+    v = venue(
+        reply={'failureReason': 'InsufficientMargin', 'failureText': 'not enough'}
+    )
     with pytest.raises(RejectedError, match='InsufficientMargin'):
         v.market('MNQZ6', Side.BUY, 1)
 
 
 def test_an_unexpected_client_error_becomes_a_transport_error():
     from anybroker import TransportError
+
     v = venue(raises=RuntimeError('socket went away'))
     with pytest.raises(TransportError, match='socket went away'):
         v.market('MNQZ6', Side.BUY, 1)

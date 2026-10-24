@@ -11,12 +11,14 @@ from anybroker.registry import CCXT_ONLY_NOTE, NATIVE_VENUES
 
 def test_ibkr_resolves_to_the_native_venue():
     from anybroker.venues.ibkr import IbkrVenue
+
     v = open_venue('ibkr', Env.PAPER, client_id=4242, port=4002)
     assert isinstance(v, IbkrVenue) and v.env is Env.PAPER
 
 
-@pytest.mark.parametrize('alias', ['ibkr', 'IBKR', 'ib', 'interactivebrokers',
-                                   'interactive_brokers'])
+@pytest.mark.parametrize(
+    'alias', ['ibkr', 'IBKR', 'ib', 'interactivebrokers', 'interactive_brokers']
+)
 def test_the_ibkr_aliases_all_work(alias):
     assert open_venue(alias, Env.PAPER, client_id=1, port=4002).name == 'ibkr'
 
@@ -38,6 +40,7 @@ def test_an_unknown_name_falls_through_to_ccxt(monkeypatch):
 def test_tradovate_resolves_to_the_native_venue():
     """ccxt has never had Tradovate, so it must not fall through to ccxt."""
     from anybroker.venues.tradovate import TradovateVenue
+
     v = open_venue('tradovate', Env.PAPER, client=object())
     assert isinstance(v, TradovateVenue) and v.env is Env.PAPER
     assert open_venue('tv', Env.LIVE, client=object()).name == 'tradovate'

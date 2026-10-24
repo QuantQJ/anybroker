@@ -64,8 +64,14 @@ That beats silently sending a test order to a live book.
 ```python
 from anybroker import OrderSpec, OrderType, Side, TimeInForce
 
-spec = OrderSpec("MNQZ6", Side.BUY, 2, OrderType.LIMIT,
-                 limit_price=20150.25, time_in_force=TimeInForce.GTC)
+spec = OrderSpec(
+    "MNQZ6",
+    Side.BUY,
+    2,
+    OrderType.LIMIT,
+    limit_price=20150.25,
+    time_in_force=TimeInForce.GTC,
+)
 
 venue.place(spec)
 ```
@@ -90,9 +96,7 @@ venue.trailing_stop("MNQZ6", Side.SELL, 2, trail_percent=1.5)
 An entry with a target and a protective stop, as one order:
 
 ```python
-venue.place(OrderSpec("MNQZ6", Side.BUY, 2,
-                      take_profit=20200.00,
-                      stop_loss=20050.00))
+venue.place(OrderSpec("MNQZ6", Side.BUY, 2, take_profit=20200.00, stop_loss=20050.00))
 ```
 
 Both prices are yours. **This library never calculates a stop distance or a
@@ -108,8 +112,8 @@ A venue that cannot express a bracket raises rather than sending a naked entry.
 ## Capabilities, asked not discovered
 
 ```python
-venue.capabilities.supports_paper          # does it have a sandbox at all
-venue.capabilities.order_types             # what it will actually accept
+venue.capabilities.supports_paper  # does it have a sandbox at all
+venue.capabilities.order_types  # what it will actually accept
 venue.capabilities.supports_brackets
 venue.capabilities.supports_modify
 ```
@@ -145,9 +149,16 @@ Everything raises. Nothing returns a dictionary with an error key in it that a
 caller could mistake for a result.
 
 ```python
-from anybroker import (BrokerError, ConfigError, UnsupportedError,
-                        NotFoundError, AuthError, ThrottledError,
-                        RejectedError, TransportError)
+from anybroker import (
+    BrokerError,
+    ConfigError,
+    UnsupportedError,
+    NotFoundError,
+    AuthError,
+    ThrottledError,
+    RejectedError,
+    TransportError,
+)
 
 try:
     venue.market("MNQZ6", Side.BUY, 1)
@@ -171,7 +182,8 @@ pip install "anybroker[all]"
 
 ```python
 from anybroker import available
-available()   # what you can open, given what is installed
+
+available()  # what you can open, given what is installed
 ```
 
 ## Tests

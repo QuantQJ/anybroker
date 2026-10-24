@@ -24,15 +24,31 @@ Order type strings were read from the installed ib_insync, not assumed:
 ``MKT``, ``LMT``, ``STP``, ``STP LMT``, ``TRAIL``, ``TRAIL LIMIT``.
 """
 
+from __future__ import annotations
+
+from typing import Any
+
 from ..enums import Env, OrderType, Side, TimeInForce
-from ..errors import (ConfigError, NotFoundError, RejectedError,
-                      TransportError, UnsupportedError, WrongDestinationError)
+from ..errors import (
+    ConfigError,
+    NotFoundError,
+    RejectedError,
+    TransportError,
+    UnsupportedError,
+    WrongDestinationError,
+)
 from ..models import Account, Order, Position, Quote
 from ..venue import Capabilities, Venue
 
-__all__ = ['IbkrVenue', 'IBKR_DOCUMENTED_GATEWAY', 'IBKR_DOCUMENTED_TWS',
-           'PAPER_ACCOUNT_PREFIXES', 'looks_like_paper', 'IB_ORDER_TYPES',
-           'IB_TIF']
+__all__ = [
+    'IbkrVenue',
+    'IBKR_DOCUMENTED_GATEWAY',
+    'IBKR_DOCUMENTED_TWS',
+    'PAPER_ACCOUNT_PREFIXES',
+    'looks_like_paper',
+    'IB_ORDER_TYPES',
+    'IB_TIF',
+]
 
 #: IBKR's documented defaults. An installation may differ -- QJ's Studio runs
 #: the live gateway on 4002 -- so these are offered by name, never applied
@@ -48,6 +64,7 @@ PAPER_ACCOUNT_PREFIXES = ('DU', 'DF')
 def looks_like_paper(account) -> bool:
     """Whether an IB account id is a simulated one."""
     return str(account or '').upper().startswith(PAPER_ACCOUNT_PREFIXES)
+
 
 IB_ORDER_TYPES = {
     OrderType.MARKET: 'MKT',
@@ -90,18 +107,31 @@ class IbkrVenue(Venue):
         supports_reduce_only=False,
         supports_quotes=True,
         notes='parent/child brackets with a shared OCA group; '
-              'reduce_only is not an IB concept')
+        'reduce_only is not an IB concept',
+    )
 
-    def __init__(self, env, *, client_id=None, port=None, host='127.0.0.1',
-                 account=None, timeout=20.0, ib=None, contract_factory=None,
-                 verify_destination=True):
+    def __init__(
+        self,
+        env,
+        *,
+        client_id=None,
+        port=None,
+        host='127.0.0.1',
+        account=None,
+        timeout=20.0,
+        ib=None,
+        contract_factory=None,
+        verify_destination=True,
+    ) -> None:
         super().__init__(env)
         if client_id is None and ib is None:
             raise ConfigError(
                 'client_id is required. IB disconnects an existing session '
                 'when a second one uses the same id, and this fleet already '
                 'has ids in use for the running desks -- pick one nothing '
-                'else uses.', venue=self.name)
+                'else uses.',
+                venue=self.name,
+            )
         if port is None:
             raise ConfigError(
                 'port is required. IB installations disagree about which port '
@@ -111,9 +141,13 @@ class IbkrVenue(Venue):
                 'gateway is listening and pass it, or pass '
                 'IBKR_DOCUMENTED_GATEWAY[%r] if yours is a default install. '
                 'The account is verified after connecting either way.'
-                % (IBKR_DOCUMENTED_GATEWAY[Env.LIVE],
-                   IBKR_DOCUMENTED_GATEWAY[Env.PAPER], self.env),
-                venue=self.name)
+                % (
+                    IBKR_DOCUMENTED_GATEWAY[Env.LIVE],
+                    IBKR_DOCUMENTED_GATEWAY[Env.PAPER],
+                    self.env,
+                ),
+                venue=self.name,
+            )
         self.client_id = client_id
         self.host = host
         self.port = int(port)
@@ -124,7 +158,7 @@ class IbkrVenue(Venue):
         self._contract_factory = contract_factory
 
     # ── lifecycle ───────────────────────────────────────────────────────────
-    def connect(self):
+    def connect(self) -> Venue:
         if self._ib is not None and getattr(self._ib, 'isConnected', bool)():
             return self
         if self._ib is None:
@@ -133,21 +167,24 @@ class IbkrVenue(Venue):
             except ImportError as exc:
                 raise ConfigError(
                     'ib_insync is not installed; pip install "anybroker[ibkr]"',
-                    venue=self.name) from exc
+                    venue=self.name,
+                ) from exc
             self._ib = IB()
         try:
-            self._ib.connect(self.host, self.port, clientId=self.client_id,
-                             timeout=self.timeout)
+            self._ib.connect(
+                self.host, self.port, clientId=self.client_id, timeout=self.timeout
+            )
         except Exception as exc:
             raise TransportError(
                 'could not reach IB at %s:%s as client %s (%s)'
                 % (self.host, self.port, self.client_id, exc),
-                venue=self.name) from exc
+                venue=self.name,
+            ) from exc
         if self.verify_destination:
             self._verify_destination()
         return self
 
-    def _verify_destination(self):
+    def _verify_destination(self) -> None:
         """Confirm the account IB handed back matches the environment asked for.
 
         This is the guard that does not depend on knowing which port is which.
@@ -161,15 +198,20 @@ class IbkrVenue(Venue):
             raise TransportError(
                 'connected to %s:%s but could not read the account back (%s); '
                 'refusing to trade a destination that cannot be verified'
-                % (self.host, self.port, exc), venue=self.name) from exc
+                % (self.host, self.port, exc),
+                venue=self.name,
+            ) from exc
         if not accounts:
             self.close()
             raise WrongDestinationError(
                 'connected to %s:%s but IB reported no accounts, so the '
                 'destination cannot be confirmed as %s'
                 % (self.host, self.port, self.env.value),
-                asked=self.env, accounts=accounts, port=self.port,
-                venue=self.name)
+                asked=self.env,
+                accounts=accounts,
+                port=self.port,
+                venue=self.name,
+            )
         paper = [a for a in accounts if looks_like_paper(a)]
         live = [a for a in accounts if not looks_like_paper(a)]
         if self.env is Env.PAPER and live:
@@ -179,8 +221,11 @@ class IbkrVenue(Venue):
                 'live account(s) %s. Disconnected without sending anything. '
                 'That port is the live gateway on this machine.'
                 % (self.host, self.port, ', '.join(live)),
-                asked=self.env, accounts=accounts, port=self.port,
-                venue=self.name)
+                asked=self.env,
+                accounts=accounts,
+                port=self.port,
+                venue=self.name,
+            )
         if self.env is Env.LIVE and not live:
             self.close()
             raise WrongDestinationError(
@@ -188,17 +233,23 @@ class IbkrVenue(Venue):
                 'returned is a paper one (%s). Disconnected. Orders sent here '
                 'would not have reached the market.'
                 % (self.host, self.port, ', '.join(paper)),
-                asked=self.env, accounts=accounts, port=self.port,
-                venue=self.name)
+                asked=self.env,
+                accounts=accounts,
+                port=self.port,
+                venue=self.name,
+            )
         if self.account and self.account not in accounts:
             self.close()
             raise WrongDestinationError(
                 'account %s was requested but IB at %s:%s only offers %s'
                 % (self.account, self.host, self.port, ', '.join(accounts)),
-                asked=self.env, accounts=accounts, port=self.port,
-                venue=self.name)
+                asked=self.env,
+                accounts=accounts,
+                port=self.port,
+                venue=self.name,
+            )
 
-    def close(self):
+    def close(self) -> None:
         if self._ib is not None:
             try:
                 self._ib.disconnect()
@@ -206,14 +257,13 @@ class IbkrVenue(Venue):
                 pass
 
     @property
-    def ib(self):
+    def ib(self) -> Any:
         if self._ib is None:
-            raise ConfigError('not connected; call connect() first',
-                              venue=self.name)
+            raise ConfigError('not connected; call connect() first', venue=self.name)
         return self._ib
 
     # ── contracts ───────────────────────────────────────────────────────────
-    def contract(self, symbol):
+    def contract(self, symbol) -> Any:
         """Resolve a symbol to an IB contract.
 
         A caller with its own contract rules passes ``contract_factory=``.
@@ -223,84 +273,108 @@ class IbkrVenue(Venue):
         if self._contract_factory is not None:
             return self._contract_factory(symbol)
         if not isinstance(symbol, str):
-            return symbol                      # already a contract object
+            return symbol  # already a contract object
         from ib_insync import Contract
+
         candidate = Contract(symbol=symbol)
         found = self.ib.qualifyContracts(candidate)
         if not found:
             raise NotFoundError(
                 'IB could not qualify %r; pass contract_factory= or hand in '
-                'an ib_insync Contract' % symbol, venue=self.name)
+                'an ib_insync Contract' % symbol,
+                venue=self.name,
+            )
         if len(found) > 1:
             raise ConfigError(
                 '%r is ambiguous at IB (%d matches); be specific or pass '
-                'contract_factory=' % (symbol, len(found)), venue=self.name)
+                'contract_factory=' % (symbol, len(found)),
+                venue=self.name,
+            )
         return found[0]
 
     # ── reads ───────────────────────────────────────────────────────────────
-    def get_account(self):
+    def get_account(self) -> Account:
         account_id = self.account or self._default_account()
         values = {}
         for row in self.ib.accountValues(account_id) or []:
             if row.currency in ('USD', 'BASE', ''):
                 values[row.tag] = row.value
         return Account(
-            id=account_id, venue=self.name,
+            id=account_id,
+            venue=self.name,
             cash=_f(values.get('TotalCashValue')),
             equity=_f(values.get('NetLiquidation')),
             open_pnl=_f(values.get('UnrealizedPnL')),
             realized_pnl=_f(values.get('RealizedPnL')),
-            raw=values)
+            raw=values,
+        )
 
-    def _default_account(self):
+    def _default_account(self) -> str:
         accounts = list(self.ib.managedAccounts() or [])
         if not accounts:
-            raise NotFoundError('IB reported no managed accounts',
-                                venue=self.name)
+            raise NotFoundError('IB reported no managed accounts', venue=self.name)
         if len(accounts) > 1:
             raise ConfigError(
                 'this login has %d accounts (%s); say which with account='
-                % (len(accounts), ', '.join(accounts)), venue=self.name)
+                % (len(accounts), ', '.join(accounts)),
+                venue=self.name,
+            )
         return accounts[0]
 
-    def list_positions(self):
+    def list_positions(self) -> list[Position]:
         out = []
-        for p in self.ib.positions(self.account) if self.account else self.ib.positions():
-            out.append(Position(
-                symbol=_local(p.contract), venue=self.name,
-                qty=float(p.position), avg_price=float(p.avgCost or 0.0),
-                raw={'contract': p.contract, 'account': getattr(p, 'account', None)}))
+        for p in (
+            self.ib.positions(self.account) if self.account else self.ib.positions()
+        ):
+            out.append(
+                Position(
+                    symbol=_local(p.contract),
+                    venue=self.name,
+                    qty=float(p.position),
+                    avg_price=float(p.avgCost or 0.0),
+                    raw={
+                        'contract': p.contract,
+                        'account': getattr(p, 'account', None),
+                    },
+                )
+            )
         return out
 
-    def list_orders(self):
+    def list_orders(self) -> list[Order]:
         out = []
         for t in self.ib.trades():
             out.append(_order_of(t, self.name))
         return out
 
-    def get_quote(self, symbol):
+    def get_quote(self, symbol) -> Quote:
         contract = self.contract(symbol)
         ticker = self.ib.reqMktData(contract, '', True, False)
         self.ib.sleep(0.4)
-        return Quote(symbol=_local(contract), venue=self.name,
-                     bid=_none_if_nan(ticker.bid), ask=_none_if_nan(ticker.ask),
-                     last=_none_if_nan(ticker.last), raw={'ticker': ticker})
+        return Quote(
+            symbol=_local(contract),
+            venue=self.name,
+            bid=_none_if_nan(ticker.bid),
+            ask=_none_if_nan(ticker.ask),
+            last=_none_if_nan(ticker.last),
+            raw={'ticker': ticker},
+        )
 
     # ── writes ──────────────────────────────────────────────────────────────
-    def place(self, spec):
+    def place(self, spec) -> Any:
         spec.validate()
         self.capabilities.require_order_type(spec.order_type, self.name)
         if spec.reduce_only:
             raise UnsupportedError(
                 'IB has no reduce-only flag; size the closing order yourself',
-                venue=self.name)
+                venue=self.name,
+            )
         contract = self.contract(spec.symbol)
         if spec.is_bracket:
             return self._place_bracket(spec, contract)
         trade = self._submit(self._ib_order(spec), contract)
         return _order_of(trade, self.name)
 
-    def _place_bracket(self, spec, contract):
+    def _place_bracket(self, spec, contract) -> Order:
         """Parent plus children, held until the whole group is staged.
 
         The parent goes out with ``transmit=False`` so IB holds it, each child
@@ -321,21 +395,23 @@ class IbkrVenue(Venue):
             order = self._ib_order(child)
             order.parentId = parent_id
             order.ocaGroup = oca
-            order.ocaType = 1                      # cancel the rest on fill
+            order.ocaType = 1  # cancel the rest on fill
             order.transmit = index == len(children) - 1
             trades.append(self._submit(order, contract))
         result = _order_of(parent_trade, self.name)
         result.children = [_order_of(t, self.name) for t in trades]
         return result
 
-    def _ib_order(self, spec):
+    def _ib_order(self, spec) -> Any:
         from ib_insync import Order as IbOrder
+
         order = IbOrder(
             action=IB_SIDE[spec.side],
             totalQuantity=float(spec.qty),
             orderType=IB_ORDER_TYPES[spec.order_type],
             tif=IB_TIF[spec.time_in_force],
-            transmit=True)
+            transmit=True,
+        )
         if spec.limit_price is not None:
             order.lmtPrice = float(spec.limit_price)
         if spec.stop_price is not None:
@@ -356,54 +432,67 @@ class IbkrVenue(Venue):
             setattr(order, key, value)
         return order
 
-    def _submit(self, order, contract):
+    def _submit(self, order, contract) -> Any:
         try:
             return self.ib.placeOrder(contract, order)
         except Exception as exc:
             raise TransportError(
                 'IB refused the submission: %s -- this order may or may not '
                 'have been accepted. Read order and position state before '
-                'sending anything else.' % exc, venue=self.name,
-                ambiguous=True) from exc
+                'sending anything else.' % exc,
+                venue=self.name,
+                ambiguous=True,
+            ) from exc
 
-    def cancel(self, order_id):
+    def cancel(self, order_id) -> Any:
         for trade in self.ib.trades():
             if str(trade.order.orderId) == str(order_id):
                 self.ib.cancelOrder(trade.order)
                 return _order_of(trade, self.name)
-        raise NotFoundError('no IB order %s in this session' % order_id,
-                            venue=self.name)
+        raise NotFoundError(
+            'no IB order %s in this session' % order_id, venue=self.name
+        )
 
-    def modify(self, order_id, **changes):
+    def modify(self, order_id, **changes) -> Any:
         """IB modifies by re-placing the same orderId with new values."""
         for trade in self.ib.trades():
             if str(trade.order.orderId) != str(order_id):
                 continue
             order = trade.order
-            mapping = {'qty': 'totalQuantity', 'limit_price': 'lmtPrice',
-                       'stop_price': 'auxPrice', 'trail_amount': 'auxPrice',
-                       'trail_percent': 'trailingPercent'}
+            mapping = {
+                'qty': 'totalQuantity',
+                'limit_price': 'lmtPrice',
+                'stop_price': 'auxPrice',
+                'trail_amount': 'auxPrice',
+                'trail_percent': 'trailingPercent',
+            }
             for key, value in changes.items():
                 field = mapping.get(key, key)
                 if not hasattr(order, field):
-                    raise ConfigError('IB orders have no %r' % key,
-                                      venue=self.name)
+                    raise ConfigError('IB orders have no %r' % key, venue=self.name)
                 setattr(order, field, value)
             order.transmit = True
             return _order_of(self._submit(order, trade.contract), self.name)
-        raise NotFoundError('no IB order %s in this session' % order_id,
-                            venue=self.name)
+        raise NotFoundError(
+            'no IB order %s in this session' % order_id, venue=self.name
+        )
 
-    def flatten(self, symbol):
+    def flatten(self, symbol) -> Any:
         """Close one symbol at market, sized from the open position."""
         position = self.get_position(symbol)
         if position is None or position.is_flat:
-            raise NotFoundError('no open position in %s' % symbol,
-                                venue=self.name)
+            raise NotFoundError('no open position in %s' % symbol, venue=self.name)
         side = Side.SELL if position.qty > 0 else Side.BUY
-        from .. spec import OrderSpec
-        spec = OrderSpec(symbol, side, abs(position.qty), OrderType.MARKET,
-                         time_in_force=TimeInForce.DAY, label='flatten')
+        from ..spec import OrderSpec
+
+        spec = OrderSpec(
+            symbol,
+            side,
+            abs(position.qty),
+            OrderType.MARKET,
+            time_in_force=TimeInForce.DAY,
+            label='flatten',
+        )
         contract = position.raw.get('contract') or symbol
         trade = self._submit(self._ib_order(spec), self.contract(contract))
         return _order_of(trade, self.name)
@@ -411,12 +500,15 @@ class IbkrVenue(Venue):
 
 # ── helpers ─────────────────────────────────────────────────────────────────
 
-def _order_of(trade, venue):
+
+def _order_of(trade, venue) -> Order:
     o, s = trade.order, trade.orderStatus
     reverse = {v: k for k, v in IB_ORDER_TYPES.items()}
     status = getattr(s, 'status', '') or ''
     order = Order(
-        id=str(o.orderId), venue=venue, symbol=_local(trade.contract),
+        id=str(o.orderId),
+        venue=venue,
+        symbol=_local(trade.contract),
         side=Side.BUY if o.action == 'BUY' else Side.SELL,
         qty=float(o.totalQuantity or 0.0),
         order_type=reverse.get(o.orderType),
@@ -426,27 +518,33 @@ def _order_of(trade, venue):
         limit_price=_none_if_zero(getattr(o, 'lmtPrice', None)),
         stop_price=_none_if_zero(getattr(o, 'auxPrice', None)),
         client_order_id=getattr(o, 'orderRef', None) or None,
-        raw={'order': o, 'status': s, 'contract': trade.contract})
+        raw={'order': o, 'status': s, 'contract': trade.contract},
+    )
     if status.lower() in ('rejected', 'inactive') and getattr(s, 'whyHeld', None):
-        raise RejectedError('IB rejected order %s: %s'
-                            % (o.orderId, s.whyHeld), venue=venue,
-                            detail=order)
+        raise RejectedError(
+            'IB rejected order %s: %s' % (o.orderId, s.whyHeld),
+            venue=venue,
+            detail=order,
+        )
     return order
 
 
-def _local(contract):
-    return (getattr(contract, 'localSymbol', None)
-            or getattr(contract, 'symbol', None) or str(contract))
+def _local(contract) -> str:
+    return (
+        getattr(contract, 'localSymbol', None)
+        or getattr(contract, 'symbol', None)
+        or str(contract)
+    )
 
 
-def _f(value, default=0.0):
+def _f(value, default=0.0) -> float:
     try:
         return float(value)
     except (TypeError, ValueError):
         return default
 
 
-def _none_if_zero(value):
+def _none_if_zero(value) -> float | None:
     try:
         value = float(value)
     except (TypeError, ValueError):
@@ -454,7 +552,7 @@ def _none_if_zero(value):
     return None if value == 0.0 else value
 
 
-def _none_if_nan(value):
+def _none_if_nan(value) -> float | None:
     try:
         value = float(value)
     except (TypeError, ValueError):
