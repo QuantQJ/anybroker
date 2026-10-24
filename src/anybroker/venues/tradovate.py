@@ -80,6 +80,11 @@ class TradovateVenue(Venue):
     name = 'tradovate'
     capabilities = Capabilities(
         order_types=frozenset(TV_ORDER_TYPES),
+        # Only an absolute distance is wired. Tradovate's schema has
+        # pegDifference, but what it means for a trailing order is not stated
+        # in their published docs, so a percent trail is refused rather than
+        # mapped onto a field whose behaviour was not verified.
+        trailing_forms=frozenset({'amount'}),
         supports_paper=True,
         supports_brackets=True,
         supports_modify=True,
@@ -188,14 +193,7 @@ class TradovateVenue(Venue):
                 'yourself, or use flatten()',
                 venue=self.name,
             )
-        if spec.trail_percent is not None:
-            raise UnsupportedError(
-                'a percent trail is not wired for Tradovate -- its trailing '
-                'types take an absolute distance here. Use trail_amount=, or '
-                'pass pegDifference through extra= if you have confirmed what '
-                'Tradovate does with it.',
-                venue=self.name,
-            )
+        self.capabilities.require_trailing_form(spec, self.name)
         if spec.is_bracket:
             return self._place_bracket(spec)
         reply = self._guard(self.client.place, **self._order_kw(spec))

@@ -139,6 +139,9 @@ class IbkrVenue(Venue):
     name = 'ibkr'
     capabilities = Capabilities(
         order_types=frozenset(IB_ORDER_TYPES),
+        # IB takes an absolute distance as auxPrice and a proportional one as
+        # trailingPercent, so both forms work.
+        trailing_forms=frozenset({'amount', 'percent'}),
         supports_paper=True,
         supports_brackets=True,
         supports_modify=True,
@@ -630,6 +633,7 @@ class IbkrVenue(Venue):
         self._require_connection(for_write=True)
         spec.validate()
         self.capabilities.require_order_type(spec.order_type, self.name)
+        self.capabilities.require_trailing_form(spec, self.name)
         if spec.reduce_only:
             raise UnsupportedError(
                 'IB has no reduce-only flag; size the closing order yourself',

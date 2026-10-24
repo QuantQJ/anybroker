@@ -219,9 +219,13 @@ def test_a_trailing_stop_by_amount_goes_through_as_a_stop_price():
 
 def test_a_percent_trail_is_refused_rather_than_guessed():
     v = venue()
-    with pytest.raises(UnsupportedError, match='percent trail is not wired'):
+    with pytest.raises(UnsupportedError, match='does not take a trailing percent'):
         v.trailing_stop('MNQZ6', Side.SELL, 1, trail_percent=1.5)
     assert not [c for c in v.client.calls if c['name'] == 'place']
+
+
+def test_tradovate_declares_an_absolute_trail_only():
+    assert venue().capabilities.trailing_forms == frozenset({'amount'})
 
 
 def test_time_in_force_is_passed():

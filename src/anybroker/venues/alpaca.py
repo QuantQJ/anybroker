@@ -91,6 +91,8 @@ class AlpacaVenue(Venue):
     name = 'alpaca'
     capabilities = Capabilities(
         order_types=frozenset(ALPACA_ORDER_TYPES),
+        # trail_price and trail_percent are both on Alpaca's trailing request.
+        trailing_forms=frozenset({'amount', 'percent'}),
         supports_paper=True,
         supports_brackets=True,
         supports_modify=True,
@@ -266,6 +268,7 @@ class AlpacaVenue(Venue):
     def _place(self, spec) -> Order:
         spec.validate()
         self.capabilities.require_order_type(spec.order_type, self.name)
+        self.capabilities.require_trailing_form(spec, self.name)
         if spec.time_in_force is TimeInForce.GTD:
             raise UnsupportedError(
                 'Alpaca has no good-til-date. Its times in force are %s, plus '

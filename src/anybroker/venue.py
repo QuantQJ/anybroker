@@ -21,9 +21,14 @@ from .errors import (
 )
 from .models import Account, Order, Position, Quote
 
-__all__ = ['Capabilities', 'Venue', 'Submission']
+__all__ = ['Capabilities', 'Venue', 'Submission', 'TRAILING_FORMS']
 
 ALL_ORDER_TYPES = frozenset(OrderType)
+
+#: How a trailing distance can be expressed. Most venues take one and not the
+#: other -- of the 19 ccxt exchanges with any trailing support, 16 accept only
+#: one form -- so this is declared per venue rather than assumed.
+TRAILING_FORMS = frozenset({'amount', 'percent'})
 
 
 @dataclass
@@ -61,6 +66,7 @@ class Capabilities:
     """
 
     order_types: frozenset = ALL_ORDER_TYPES
+    trailing_forms: frozenset = TRAILING_FORMS
     supports_paper: bool = False
     supports_brackets: bool = False
     supports_modify: bool = False
@@ -87,6 +93,28 @@ class Capabilities:
                 'use a different venue' % (venue or 'this venue'),
                 venue=venue,
             )
+
+    def require_trailing_form(self, spec, venue=None) -> None:
+        """Check the trail was expressed in a form this venue accepts.
+
+        An absolute distance and a percentage are different endpoints at most
+        venues. Sending the wrong one is a rejection at the exchange, so it is
+        caught here instead.
+        """
+        wanted = None
+        if spec.trail_amount is not None:
+            wanted = 'amount'
+        elif spec.trail_percent is not None:
+            wanted = 'percent'
+        if wanted is None or wanted in self.trailing_forms:
+            return
+        other = {'amount': 'trail_percent=', 'percent': 'trail_amount='}[wanted]
+        has = ', '.join(sorted(self.trailing_forms)) or 'neither'
+        raise UnsupportedError(
+            '%s does not take a trailing %s; it takes %s. Use %s.'
+            % (venue or 'this venue', wanted, has, other),
+            venue=venue,
+        )
 
     def require_brackets(self, venue=None) -> None:
         if not self.supports_brackets:

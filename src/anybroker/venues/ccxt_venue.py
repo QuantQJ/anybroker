@@ -58,11 +58,17 @@ def _capabilities_of(exchange) -> Capabilities:
     types = {OrderType.MARKET, OrderType.LIMIT}
     if has.get('createStopOrder') or has.get('createTriggerOrder'):
         types |= {OrderType.STOP, OrderType.STOP_LIMIT}
-    if has.get('createTrailingAmountOrder') or has.get('createTrailingPercentOrder'):
+    forms = set()
+    if has.get('createTrailingAmountOrder'):
+        forms.add('amount')
+    if has.get('createTrailingPercentOrder'):
+        forms.add('percent')
+    if forms:
         types |= {OrderType.TRAILING_STOP, OrderType.TRAILING_STOP_LIMIT}
     sandbox = bool(getattr(exchange, 'urls', {}).get('test'))
     return Capabilities(
         order_types=frozenset(types),
+        trailing_forms=frozenset(forms),
         supports_paper=sandbox,
         supports_brackets=bool(has.get('createOrderWithTakeProfitAndStopLoss')),
         supports_modify=bool(has.get('editOrder')),
@@ -219,6 +225,7 @@ class CcxtVenue(Venue):
     def _place(self, spec) -> Order:
         spec.validate()
         self.capabilities.require_order_type(spec.order_type, self.name)
+        self.capabilities.require_trailing_form(spec, self.name)
         if spec.is_bracket:
             self.capabilities.require_brackets(self.name)
         params = dict(spec.extra or {})
