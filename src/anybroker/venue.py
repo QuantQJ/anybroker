@@ -205,7 +205,20 @@ class Venue:
         return None
 
     def get_quote(self, symbol) -> Quote:
-        raise NotImplementedError
+        """The current bid and ask, where the venue offers them.
+
+        Several do not: Tradovate's market data is a separate websocket
+        subscription, and Alpaca's quotes need a data plan the trading key
+        does not carry. Those declare ``supports_quotes=False``, and asking
+        anyway says so rather than raising a bare NotImplementedError with
+        nothing in it.
+        """
+        raise UnsupportedError(
+            '%s does not serve quotes through this interface; '
+            'capabilities.supports_quotes is False. Use that venue\'s own '
+            'market-data feed instead.' % self.name,
+            venue=self.name,
+        )
 
     # ── writes ──────────────────────────────────────────────────────────────
     def place(self, spec, *, allow_duplicate: bool = False) -> Order:
