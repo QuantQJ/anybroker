@@ -348,7 +348,7 @@ from anybroker import available
 
 available()
 # {'native': ['alpaca', 'ibkr'],
-#  'native_missing': {'tradovate': 'pip install "anybroker[tradovate]"'},
+#  'native_missing': {'tradovate': 'pip install "anybroker[tradovate] @ git+https://github.com/QuantQJ/anybroker.git"'},
 #  'all_native': ['alpaca', 'ibkr', 'tradovate'],
 #  'ccxt': [...]}
 ```
