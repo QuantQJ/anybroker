@@ -35,12 +35,24 @@ def test_an_unknown_name_falls_through_to_ccxt(monkeypatch):
         open_venue('definitely-not-an-exchange', Env.LIVE)
 
 
+def test_tradovate_resolves_to_the_native_venue():
+    """ccxt has never had Tradovate, so it must not fall through to ccxt."""
+    from anybroker.venues.tradovate import TradovateVenue
+    v = open_venue('tradovate', Env.PAPER, client=object())
+    assert isinstance(v, TradovateVenue) and v.env is Env.PAPER
+    assert open_venue('tv', Env.LIVE, client=object()).name == 'tradovate'
+
+
+def test_both_futures_brokers_are_native():
+    assert set(NATIVE_VENUES) == {'ibkr', 'tradovate'}
+
+
 def test_the_message_names_the_native_venues_so_you_know_where_to_look(monkeypatch):
     fake = types.ModuleType('ccxt')
     fake.exchanges = ['kraken']
     monkeypatch.setitem(sys.modules, 'ccxt', fake)
     with pytest.raises(ConfigError) as caught:
-        open_venue('tradovate', Env.LIVE)
+        open_venue('tradestation', Env.LIVE)
     assert 'IBKR' in str(caught.value) or 'own venues' in str(caught.value)
 
 

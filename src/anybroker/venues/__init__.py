@@ -2,7 +2,7 @@
 with none of them installed.
 """
 
-__all__ = ['CcxtVenue', 'IbkrVenue']
+__all__ = ['CcxtVenue', 'IbkrVenue', 'TradovateVenue']
 
 
 def __getattr__(name):
@@ -12,4 +12,7 @@ def __getattr__(name):
     if name == 'IbkrVenue':
         from .ibkr import IbkrVenue
         return IbkrVenue
+    if name == 'TradovateVenue':
+        from .tradovate import TradovateVenue
+        return TradovateVenue
     raise AttributeError(name)

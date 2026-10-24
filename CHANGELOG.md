@@ -32,5 +32,12 @@ First cut. One interface, two kinds of venue.
   `client_id` is required with no default, because IB disconnects an existing
   session when a second one reuses an id.
 
-Not here yet: Tradovate wired in through `tradovate-client`, Alpaca equities,
+- `TradovateVenue` — the second native venue, through `tradovate-client`.
+  Driven with plain strings (`demo`/`live`, `Buy`/`Sell`, `Market`, `Day`),
+  every one a value from Tradovate's published enums, so the mapping is
+  asserted against a fake client. Brackets go out as Tradovate's own
+  one-sends-other, so there is no window where a naked entry is working. A
+  percent trail is refused rather than guessed at.
+
+Not here yet: Alpaca equities (ccxt's Alpaca is the crypto side only),
 Tradier, TradeStation, market data beyond a single quote.

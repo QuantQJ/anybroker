@@ -30,8 +30,18 @@ venues, and they are the reason it exists.
 ```
 anybroker
 ├── ccxt            → 104 crypto exchanges, somebody else's problem
-└── native venues   → IBKR (here), Tradovate (next), Alpaca equities
+└── native venues   → IBKR, Tradovate  (Alpaca equities, Tradier next)
 ```
+
+```python
+tv = open_venue("tradovate", Env.PAPER, credential_path="/secure/key.json")
+tv.limit("MNQZ6", Side.BUY, 2, 20150.25)
+tv.place(OrderSpec("MNQZ6", Side.BUY, 2, take_profit=20200.0, stop_loss=20050.0))
+```
+
+Tradovate's paper environment is a different host with different credentials,
+so a venue built for paper has no route to the live book — not because a flag
+says so, but because it is a different server.
 
 ## Paper and live are different destinations
 
@@ -175,7 +185,6 @@ Fake IB and fake ccxt. No network, no credentials, no gateway, no account.
 
 ## Not here yet
 
-- Tradovate, through `tradovate-client`
 - Alpaca equities (ccxt's Alpaca is the crypto side only)
 - Tradier, TradeStation
 - Market data beyond a single quote

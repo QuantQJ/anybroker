@@ -10,7 +10,8 @@
 The crypto exchanges come from ccxt, which already covers 104 of them with
 every order type and somebody else maintaining it. What ccxt has never had is
 Tradovate, IBKR, Tradier, TradeStation or NinjaTrader -- the futures and
-retail brokers. Those are this library's own.
+retail brokers. Tradovate and IBKR are this library's own venues; the rest of
+that list is still to come.
 
 ``env`` is required everywhere and has no default. Paper and live are
 different destinations, and a venue built for one has no code path to the

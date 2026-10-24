@@ -16,7 +16,7 @@ from .errors import ConfigError
 __all__ = ['open_venue', 'available', 'NATIVE_VENUES', 'CCXT_ONLY_NOTE']
 
 #: Venues this library implements itself, because ccxt has never had them.
-NATIVE_VENUES = ('ibkr',)
+NATIVE_VENUES = ('ibkr', 'tradovate')
 
 CCXT_ONLY_NOTE = (
     'ccxt covers crypto exchanges only. It has no Tradovate, IBKR, Tradier, '
@@ -30,6 +30,9 @@ def open_venue(name, env, **kw):
     if key in ('ibkr', 'ib', 'interactivebrokers', 'interactive_brokers'):
         from .venues.ibkr import IbkrVenue
         return IbkrVenue(env, **kw)
+    if key in ('tradovate', 'tv'):
+        from .venues.tradovate import TradovateVenue
+        return TradovateVenue(env, **kw)
     from .venues.ccxt_venue import CcxtVenue
     return CcxtVenue(key, env, **kw)
 
