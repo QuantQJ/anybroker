@@ -10,6 +10,9 @@ __all__ = [
     'ThrottledError',
     'RejectedError',
     'WrongDestinationError',
+    'DuplicateOrderError',
+    'UnresolvedOrderError',
+    'DisconnectedError',
 ]
 
 
@@ -82,6 +85,47 @@ class WrongDestinationError(BrokerError):
         self.asked = asked
         self.accounts = list(accounts or [])
         self.port = port
+
+
+class DuplicateOrderError(BrokerError):
+    """This exact order has already been submitted in this session.
+
+    Carries the ``order`` it matched and the ``key`` they share. Raised rather
+    than guessed at, because a repeat of a finished order is ambiguous: it is
+    either a bug, or a genuine second entry that wants its own
+    ``client_order_id``. Pass ``allow_duplicate=True`` to say you meant it.
+    """
+
+    def __init__(self, message, *, key=None, order=None, **kw) -> None:
+        super().__init__(message, **kw)
+        self.key = key
+        self.order = order
+
+
+class UnresolvedOrderError(BrokerError):
+    """A previous submission of this order never got an answer.
+
+    The venue timed out or the socket dropped mid-write, so the order may be
+    working and may not. Resending could double the position; assuming it
+    failed could leave one unmanaged. The only safe move is to read the
+    broker's own state, so this raises and says so.
+
+    Clear it with ``venue.resolve(key, order_id=...)`` once you have looked,
+    or ``venue.forget(key)`` if you confirmed nothing was accepted.
+    """
+
+    def __init__(self, message, *, key=None, **kw) -> None:
+        super().__init__(message, **kw)
+        self.key = key
+
+
+class DisconnectedError(BrokerError):
+    """The connection is down.
+
+    IB drops its socket during the nightly reset. Reads may be retried after a
+    reconnect; writes never are, because a write in flight when the socket
+    died is unresolved, not failed.
+    """
 
 
 class TransportError(BrokerError):

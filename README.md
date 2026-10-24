@@ -143,6 +143,105 @@ Pass `port=` for anything else. Symbols are qualified through IB, and an
 ambiguous one raises instead of a leg being picked for you — pass
 `contract_factory=` or an `ib_insync` `Contract` if you have your own rules.
 
+## Sending the same order twice
+
+The same `OrderSpec` does not become two orders.
+
+```python
+spec = OrderSpec("MNQZ6", Side.BUY, 2, OrderType.LIMIT, limit_price=20150.25)
+
+first = venue.place(spec)
+second = venue.place(spec)  # nothing is sent
+assert second.id == first.id
+```
+
+The second call reads the order back **from the venue**, not from a cache, so
+what you get reflects the broker's current state. Three outcomes:
+
+| the first one is | `place()` does |
+| --- | --- |
+| still working | returns it, sends nothing |
+| finished | raises `DuplicateOrderError` |
+| never answered | raises `UnresolvedOrderError` |
+
+A finished order raises rather than guessing: a repeat is either a bug or a
+genuine second entry, and only you know which. Say which you meant:
+
+```python
+venue.place(spec, allow_duplicate=True)  # I meant it
+venue.place(OrderSpec(..., client_order_id="long0558:2026-10-24"))  # better
+```
+
+Identity comes from `spec.idempotency_key` — your `client_order_id` when you
+set one, otherwise a digest of what the order instructs (symbol, side, size,
+type, prices, bracket). `label` and `extra` are excluded, because they
+describe an order rather than change it. **A rule that fires daily should set
+its own id, scoped to the day.**
+
+### The unanswered write
+
+A write that fails ambiguously locks its key until you have looked:
+
+```python
+try:
+    venue.place(spec)
+except TransportError as exc:
+    if exc.ambiguous:
+        # may be working. Read before writing anything else.
+        print(venue.unresolved())
+
+venue.resolve(key, order_id=4242)  # found it
+venue.forget(key)  # confirmed it never landed
+```
+
+A clean refusal — a bad symbol, an unsupported type — is *not* ambiguous and
+leaves you free to try again immediately.
+
+## Surviving a disconnect
+
+IB drops its socket during the nightly reset. The venue expects that.
+
+```python
+ib = open_venue(
+    "ibkr",
+    Env.LIVE,
+    client_id=7788,
+    port=4002,
+    state_path="~/.local/state/anybroker/ibkr.json",
+)
+```
+
+**A read may reconnect and answer. A write never does.** Reconnecting tells
+you nothing about an order that was in flight when the socket died, so a write
+on a dead connection raises `DisconnectedError` and sends nothing:
+
+> the IB connection to 127.0.0.1:4002 is down, so this order was not sent.
+> Reconnect and read your order and position state before sending anything —
+> an order that was in flight when the socket dropped is unresolved, not failed.
+
+**Brackets survive the drop.** Every connect runs `resync()`, which rebuilds
+the parent/child groups from IB's own open orders — the OCA group name
+survives in IB's copy, which is what makes this possible:
+
+```python
+venue.resync()
+# {'connected': True, 'brackets': 3, 'recovered': ['41'],
+#  'dropped': [], 'orphans': ['55'], 'working': 7}
+
+venue.brackets()  # parent id -> group
+venue.unprotected_positions()  # the question actually worth asking
+```
+
+`unprotected_positions()` lists open positions with no working stop against
+them. A bracket whose stop was cancelled during a reset window leaves the
+position naked and nothing in IB tells you unless you ask. A target alone does
+not count — only a stop does.
+
+With `state_path` set, the registry is written to disk, so a process restarted
+by launchd at 1:36am does not start blind. IB is still the authority: the file
+is a hint that `resync()` checks, and any submission restored from it is
+marked **unresolved**, because this process never saw the broker confirm it.
+
 ## Errors
 
 Everything raises. Nothing returns a dictionary with an error key in it that a

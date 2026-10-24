@@ -10,12 +10,37 @@ caller's own numbers or they are absent.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 
 from .enums import OrderType, Side, TimeInForce
 from .errors import ConfigError
 
-__all__ = ['OrderSpec', 'NEEDS_LIMIT', 'NEEDS_STOP', 'NEEDS_TRAIL']
+__all__ = [
+    'OrderSpec',
+    'NEEDS_LIMIT',
+    'NEEDS_STOP',
+    'NEEDS_TRAIL',
+    'FINGERPRINT_FIELDS',
+]
+
+#: The fields that make two orders the same order. Deliberately excludes
+#: ``label`` and ``extra``, which annotate an order rather than change it.
+FINGERPRINT_FIELDS = (
+    'symbol',
+    'side',
+    'qty',
+    'order_type',
+    'limit_price',
+    'stop_price',
+    'trail_amount',
+    'trail_percent',
+    'time_in_force',
+    'good_til',
+    'take_profit',
+    'stop_loss',
+    'reduce_only',
+)
 
 #: Order types that cannot be sent without a limit price.
 NEEDS_LIMIT = frozenset(
@@ -87,6 +112,38 @@ class OrderSpec:
         if self.time_in_force is TimeInForce.GTD and not self.good_til:
             raise ConfigError('good-til-date needs good_til')
         return self
+
+    @property
+    def fingerprint(self) -> str:
+        """A short, stable digest of what this order actually instructs.
+
+        Two specs with the same fingerprint are the same order: same
+        instrument, side, size, type, prices and bracket. ``label`` and
+        ``extra`` are excluded, because they describe an order rather than
+        change it.
+        """
+        parts = []
+        for name in FINGERPRINT_FIELDS:
+            value = getattr(self, name)
+            if isinstance(value, (Side, OrderType, TimeInForce)):
+                value = value.value
+            elif isinstance(value, float) and value.is_integer():
+                value = int(value)
+            parts.append('%s=%r' % (name, value))
+        return hashlib.blake2b('|'.join(parts).encode(), digest_size=8).hexdigest()
+
+    @property
+    def idempotency_key(self) -> str:
+        """What identifies this submission.
+
+        Your own ``client_order_id`` when you set one -- which is the right
+        way, because only you know whether today's entry is the same order as
+        yesterday's. Otherwise the fingerprint, which catches a repeat inside
+        one session.
+        """
+        if self.client_order_id:
+            return str(self.client_order_id)
+        return 'fp:' + self.fingerprint
 
     @property
     def is_bracket(self) -> bool:

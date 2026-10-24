@@ -179,7 +179,7 @@ class TradovateVenue(Venue):
         ]
 
     # ── writes ──────────────────────────────────────────────────────────────
-    def place(self, spec) -> Any:
+    def _place(self, spec) -> Order:
         spec.validate()
         self.capabilities.require_order_type(spec.order_type, self.name)
         if spec.reduce_only:

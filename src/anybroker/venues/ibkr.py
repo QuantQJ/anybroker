@@ -26,11 +26,15 @@ Order type strings were read from the installed ib_insync, not assumed:
 
 from __future__ import annotations
 
+import json
+import pathlib
+from dataclasses import dataclass, field
 from typing import Any
 
 from ..enums import Env, OrderType, Side, TimeInForce
 from ..errors import (
     ConfigError,
+    DisconnectedError,
     NotFoundError,
     RejectedError,
     TransportError,
@@ -41,6 +45,7 @@ from ..models import Account, Order, Position, Quote
 from ..venue import Capabilities, Venue
 
 __all__ = [
+    'BracketGroup',
     'IbkrVenue',
     'IBKR_DOCUMENTED_GATEWAY',
     'IBKR_DOCUMENTED_TWS',
@@ -86,6 +91,39 @@ IB_TIF = {
 IB_SIDE = {Side.BUY: 'BUY', Side.SELL: 'SELL'}
 
 
+@dataclass
+class BracketGroup:
+    """A parent order and the protective children that belong to it.
+
+    ``oca_group`` is what IB uses to make the children cancel each other, so
+    it is also how this registry is rebuilt after a reconnect: the group name
+    survives in IB's own copy of the orders.
+    """
+
+    parent_id: str
+    symbol: str
+    oca_group: str = ''
+    child_ids: list = field(default_factory=list)
+    recovered: bool = False
+
+    def as_dict(self) -> dict:
+        return {
+            'parent_id': self.parent_id,
+            'symbol': self.symbol,
+            'oca_group': self.oca_group,
+            'child_ids': list(self.child_ids),
+        }
+
+    @classmethod
+    def from_dict(cls, d) -> BracketGroup:
+        return cls(
+            parent_id=str(d.get('parent_id') or ''),
+            symbol=str(d.get('symbol') or ''),
+            oca_group=str(d.get('oca_group') or ''),
+            child_ids=[str(c) for c in (d.get('child_ids') or [])],
+        )
+
+
 class IbkrVenue(Venue):
     """IBKR. Requires ``ib_insync`` and a running gateway or TWS.
 
@@ -122,6 +160,8 @@ class IbkrVenue(Venue):
         ib=None,
         contract_factory=None,
         verify_destination=True,
+        auto_reconnect=True,
+        state_path=None,
     ) -> None:
         super().__init__(env)
         if client_id is None and ib is None:
@@ -154,8 +194,14 @@ class IbkrVenue(Venue):
         self.account = account
         self.timeout = timeout
         self.verify_destination = verify_destination
+        self.auto_reconnect = auto_reconnect
+        self.state_path = pathlib.Path(state_path).expanduser() if state_path else None
         self._ib = ib
         self._contract_factory = contract_factory
+        self._brackets: dict[str, BracketGroup] = {}
+        self._flatten_contract = None
+        if self.state_path is not None:
+            self._load_state()
 
     # ── lifecycle ───────────────────────────────────────────────────────────
     def connect(self) -> Venue:
@@ -182,7 +228,216 @@ class IbkrVenue(Venue):
             ) from exc
         if self.verify_destination:
             self._verify_destination()
+        self.resync()
         return self
+
+    # ── connection state ────────────────────────────────────────────────────
+
+    @property
+    def is_connected(self) -> bool:
+        if self._ib is None:
+            return False
+        try:
+            return bool(self._ib.isConnected())
+        except Exception:
+            return False
+
+    def _require_connection(self, *, for_write: bool) -> None:
+        """Make sure there is a socket, without ever resending a write.
+
+        A read can safely reconnect and be asked again. A write cannot: if the
+        socket died while an order was in flight, that order is unresolved,
+        and reconnecting tells you nothing about whether it was accepted.
+        """
+        if self.is_connected:
+            return
+        if for_write:
+            raise DisconnectedError(
+                'the IB connection to %s:%s is down, so this order was not '
+                'sent. Reconnect and read your order and position state '
+                'before sending anything -- an order that was in flight when '
+                'the socket dropped is unresolved, not failed.'
+                % (self.host, self.port),
+                venue=self.name,
+            )
+        if not self.auto_reconnect:
+            raise DisconnectedError(
+                'the IB connection to %s:%s is down and auto_reconnect is off'
+                % (self.host, self.port),
+                venue=self.name,
+            )
+        self.connect()
+
+    # ── bracket state across a reconnect ────────────────────────────────────
+
+    def _after_place(self, spec, order) -> None:
+        self._save_state()
+
+    def brackets(self) -> dict:
+        """The parent/child groups this venue knows about."""
+        return dict(self._brackets)
+
+    def resync(self) -> dict:
+        """Rebuild bracket state from IB's own open orders.
+
+        Called on every connect, so a reconnect after the nightly reset picks
+        the groups back up rather than starting blind. IB is the authority
+        here: anything the registry believed that IB does not report is
+        dropped, and anything IB reports that the registry did not know is
+        adopted and marked ``recovered``.
+
+        Returns a summary, including ``orphans`` -- orders carrying an OCA
+        group whose parent IB no longer reports. Those are not necessarily
+        wrong (a parent that filled leaves its stop working) but they are the
+        ones worth looking at.
+        """
+        if not self.is_connected:
+            return {
+                'connected': False,
+                'brackets': 0,
+                'orphans': [],
+                'working': 0,
+                'dropped': [],
+            }
+        trades = list(self._ib.trades())
+        by_id = {str(t.order.orderId): t for t in trades}
+        children: dict[str, list] = {}
+        for t in trades:
+            parent_id = str(getattr(t.order, 'parentId', 0) or '')
+            if parent_id and parent_id != '0':
+                children.setdefault(parent_id, []).append(t)
+
+        rebuilt: dict[str, BracketGroup] = {}
+        for parent_id, kids in children.items():
+            parent = by_id.get(parent_id)
+            symbol = (
+                _local(parent.contract)
+                if parent
+                else (_local(kids[0].contract) if kids else '')
+            )
+            oca = next(
+                (
+                    getattr(k.order, 'ocaGroup', '')
+                    for k in kids
+                    if getattr(k.order, 'ocaGroup', '')
+                ),
+                '',
+            )
+            known = self._brackets.get(parent_id)
+            rebuilt[parent_id] = BracketGroup(
+                parent_id=parent_id,
+                symbol=symbol,
+                oca_group=oca,
+                child_ids=[str(k.order.orderId) for k in kids],
+                recovered=known is None,
+            )
+
+        dropped = [k for k in self._brackets if k not in rebuilt]
+        orphans = [
+            str(t.order.orderId)
+            for t in trades
+            if getattr(t.order, 'ocaGroup', '')
+            and str(getattr(t.order, 'parentId', 0) or '0') not in by_id
+        ]
+        self._brackets = rebuilt
+        self._save_state()
+        return {
+            'connected': True,
+            'brackets': len(rebuilt),
+            'recovered': sorted(k for k, g in rebuilt.items() if g.recovered),
+            'dropped': sorted(dropped),
+            'orphans': sorted(set(orphans)),
+            'working': sum(1 for t in trades if _order_of(t, self.name).is_working),
+        }
+
+    def unprotected_positions(self) -> list:
+        """Open positions with no working stop against them.
+
+        The question worth asking after a socket drop. A bracket whose stop
+        was cancelled during a reset window leaves the position naked, and
+        nothing in IB tells you that unless you ask.
+        """
+        working = [o for o in self.list_orders() if o.is_working]
+        protected = {
+            o.symbol
+            for o in working
+            if o.order_type
+            in (
+                OrderType.STOP,
+                OrderType.STOP_LIMIT,
+                OrderType.TRAILING_STOP,
+                OrderType.TRAILING_STOP_LIMIT,
+            )
+        }
+        return [
+            p
+            for p in self.list_positions()
+            if not p.is_flat and p.symbol not in protected
+        ]
+
+    # ── optional on-disk state ──────────────────────────────────────────────
+
+    def _save_state(self) -> None:
+        if self.state_path is None:
+            return
+        payload = {
+            'env': self.env.value,
+            'port': self.port,
+            'client_id': self.client_id,
+            'brackets': [g.as_dict() for g in self._brackets.values()],
+            'submissions': [
+                {
+                    'key': s.key,
+                    'state': s.state,
+                    'order_id': s.order_id,
+                    'symbol': s.symbol,
+                    'fingerprint': s.fingerprint,
+                }
+                for s in self._submissions.values()
+            ],
+        }
+        try:
+            self.state_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self.state_path.with_suffix('.tmp')
+            tmp.write_text(json.dumps(payload, indent=1))
+            tmp.replace(self.state_path)
+        except OSError:
+            pass  # state is a convenience; never fail a trade over it
+
+    def _load_state(self) -> None:
+        """Restore what a previous process knew. IB still gets the final say.
+
+        A restored submission marked ``submitted`` is downgraded to
+        ``unresolved`` on purpose: this process has not seen the broker
+        confirm it, so it must be read rather than trusted.
+        """
+        if self.state_path is None:
+            return
+        try:
+            payload = json.loads(self.state_path.read_text())
+        except (OSError, ValueError):
+            return
+        if payload.get('env') and payload['env'] != self.env.value:
+            return
+        for raw in payload.get('brackets') or []:
+            group = BracketGroup.from_dict(raw)
+            if group.parent_id:
+                self._brackets[group.parent_id] = group
+        from ..venue import Submission
+
+        for raw in payload.get('submissions') or []:
+            key = raw.get('key')
+            if not key:
+                continue
+            self._submissions[key] = Submission(
+                key=key,
+                fingerprint=raw.get('fingerprint') or '',
+                symbol=raw.get('symbol') or '',
+                state='unresolved',
+                order_id=raw.get('order_id') or '',
+                detail='restored from %s; not confirmed by IB in this process'
+                % self.state_path,
+            )
 
     def _verify_destination(self) -> None:
         """Confirm the account IB handed back matches the environment asked for.
@@ -260,16 +515,23 @@ class IbkrVenue(Venue):
     def ib(self) -> Any:
         if self._ib is None:
             raise ConfigError('not connected; call connect() first', venue=self.name)
+        self._require_connection(for_write=False)
         return self._ib
 
     # ── contracts ───────────────────────────────────────────────────────────
     def contract(self, symbol) -> Any:
         """Resolve a symbol to an IB contract.
 
+        A contract handed in by ``flatten`` wins, so closing a position uses
+        the very contract IB reported holding it rather than re-qualifying a
+        name that might be ambiguous.
+
         A caller with its own contract rules passes ``contract_factory=``.
         Without one this asks IB to qualify the symbol and refuses an
         ambiguous answer rather than picking a leg.
         """
+        if self._flatten_contract is not None:
+            symbol = self._flatten_contract
         if self._contract_factory is not None:
             return self._contract_factory(symbol)
         if not isinstance(symbol, str):
@@ -360,7 +622,12 @@ class IbkrVenue(Venue):
         )
 
     # ── writes ──────────────────────────────────────────────────────────────
-    def place(self, spec) -> Any:
+    def _place(self, spec) -> Order:
+        # Before anything else, including contract resolution: resolving a
+        # symbol is a read, and a read is allowed to reconnect. That would
+        # quietly repair the socket and let a write through that the caller
+        # should have been told about.
+        self._require_connection(for_write=True)
         spec.validate()
         self.capabilities.require_order_type(spec.order_type, self.name)
         if spec.reduce_only:
@@ -400,6 +667,13 @@ class IbkrVenue(Venue):
             trades.append(self._submit(order, contract))
         result = _order_of(parent_trade, self.name)
         result.children = [_order_of(t, self.name) for t in trades]
+        self._brackets[str(parent_id)] = BracketGroup(
+            parent_id=str(parent_id),
+            symbol=_local(contract),
+            oca_group=oca,
+            child_ids=[str(t.order.orderId) for t in trades],
+        )
+        self._save_state()
         return result
 
     def _ib_order(self, spec) -> Any:
@@ -433,16 +707,39 @@ class IbkrVenue(Venue):
         return order
 
     def _submit(self, order, contract) -> Any:
+        self._require_connection(for_write=True)
         try:
             return self.ib.placeOrder(contract, order)
         except Exception as exc:
-            raise TransportError(
-                'IB refused the submission: %s -- this order may or may not '
-                'have been accepted. Read order and position state before '
-                'sending anything else.' % exc,
+            raise self._submit_error(exc) from exc
+
+    def _submit_error(self, exc) -> TransportError:
+        """Decide whether a failed submission is ambiguous or merely refused.
+
+        It matters: an ambiguous one locks the key until someone reads the
+        broker's state, while a clean refusal leaves the caller free to try
+        again. Calling everything ambiguous would make a typo in a symbol as
+        obstructive as a half-sent order.
+
+        Connection-shaped failures, and anything that left the socket down,
+        are ambiguous. A bad argument is not -- it never reached IB.
+        """
+        connection_shaped = isinstance(
+            exc, (TimeoutError, ConnectionError, OSError, EOFError)
+        )
+        if connection_shaped or not self.is_connected:
+            return TransportError(
+                'IB submission failed: %s -- this order may or may not have '
+                'been accepted. Read order and position state before sending '
+                'anything else.' % exc,
                 venue=self.name,
                 ambiguous=True,
-            ) from exc
+            )
+        return TransportError(
+            'IB refused the submission before it was sent: %s' % exc,
+            venue=self.name,
+            ambiguous=False,
+        )
 
     def cancel(self, order_id) -> Any:
         for trade in self.ib.trades():
@@ -493,9 +790,13 @@ class IbkrVenue(Venue):
             time_in_force=TimeInForce.DAY,
             label='flatten',
         )
-        contract = position.raw.get('contract') or symbol
-        trade = self._submit(self._ib_order(spec), self.contract(contract))
-        return _order_of(trade, self.name)
+        # Through place(), so flattening the same position twice is caught by
+        # the duplicate guard instead of selling it twice.
+        self._flatten_contract = position.raw.get('contract') or symbol
+        try:
+            return self.place(spec)
+        finally:
+            self._flatten_contract = None
 
 
 # ── helpers ─────────────────────────────────────────────────────────────────

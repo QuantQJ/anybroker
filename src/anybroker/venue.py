@@ -11,12 +11,43 @@ from dataclasses import dataclass
 from typing import Any
 
 from .enums import Env, OrderType
-from .errors import UnsupportedError
+from .errors import (
+    ConfigError,
+    DuplicateOrderError,
+    NotFoundError,
+    TransportError,
+    UnresolvedOrderError,
+    UnsupportedError,
+)
 from .models import Account, Order, Position, Quote
 
-__all__ = ['Capabilities', 'Venue']
+__all__ = ['Capabilities', 'Venue', 'Submission']
 
 ALL_ORDER_TYPES = frozenset(OrderType)
+
+
+@dataclass
+class Submission:
+    """One order this venue has sent, and what became of it.
+
+    ``state`` is ``in_flight`` between the request leaving and an answer
+    arriving, ``submitted`` once the venue acknowledged it, and ``unresolved``
+    when the answer never came -- a timeout, or a socket that dropped
+    mid-write. Unresolved is the dangerous one: the order may be working.
+    Nothing is resent while a key stays that way.
+    """
+
+    key: str
+    fingerprint: str
+    symbol: str
+    state: str = 'in_flight'
+    order_id: str = ''
+    order: Any = None
+    detail: str = ''
+
+    @property
+    def is_unresolved(self) -> bool:
+        return self.state == 'unresolved'
 
 
 @dataclass(frozen=True)
@@ -80,6 +111,7 @@ class Venue:
     def __init__(self, env) -> None:
         self.env = Env(env)
         self.capabilities.require_env(self.env, self.name)
+        self._submissions: dict[str, Submission] = {}
 
     # ── lifecycle ───────────────────────────────────────────────────────────
     def connect(self) -> Venue:
@@ -124,8 +156,132 @@ class Venue:
         raise NotImplementedError
 
     # ── writes ──────────────────────────────────────────────────────────────
-    def place(self, spec) -> Any:
+    def place(self, spec, *, allow_duplicate: bool = False) -> Order:
+        """Send an order, once.
+
+        The same ``OrderSpec`` submitted twice does not become two orders:
+
+        * still working -> this returns it, read from the venue rather than a
+          cache, and sends nothing;
+        * already finished -> ``DuplicateOrderError``, rather than guessing
+          whether you meant a second entry. Give the new one its own
+          ``client_order_id``, or pass ``allow_duplicate=True``;
+        * never answered -> ``UnresolvedOrderError``, because resending could
+          double the position and assuming failure could leave one unmanaged.
+
+        Identity is ``spec.idempotency_key``: your ``client_order_id`` when
+        set, otherwise a digest of the instruction. A rule that fires daily
+        should set its own, scoped to the day -- which is what the live
+        Tradday rules already do.
+        """
+        spec.validate()
+        key = spec.idempotency_key
+        if not allow_duplicate:
+            existing = self._check_duplicate(spec)
+            if existing is not None:
+                return existing
+        submission = self._record_in_flight(spec)
+        try:
+            order = self._place(spec)
+        except TransportError as exc:
+            if getattr(exc, 'ambiguous', False):
+                submission.state = 'unresolved'
+                submission.detail = str(exc)
+            else:
+                self._submissions.pop(key, None)
+            raise
+        except Exception:
+            self._submissions.pop(key, None)
+            raise
+        submission.state = 'submitted'
+        submission.order_id = str(getattr(order, 'id', '') or '')
+        submission.order = order
+        self._after_place(spec, order)
+        return order
+
+    def _after_place(self, spec, order) -> None:
+        """Hook for a venue that persists what it has sent. Default: nothing."""
+
+    def _place(self, spec) -> Order:
+        """Actually send it. Each venue implements this; callers use place()."""
         raise NotImplementedError
+
+    # ── idempotency ─────────────────────────────────────────────────────────
+
+    def _check_duplicate(self, spec) -> Any:
+        """The live order if this spec is already working, else None."""
+        key = spec.idempotency_key
+        previous = self._submissions.get(key)
+        if previous is None:
+            return None
+        if previous.is_unresolved:
+            raise UnresolvedOrderError(
+                'a previous submission of %s never got an answer from %s '
+                '(%s). It may be working. Read the order state, then call '
+                'resolve(key, order_id=...) or forget(key).'
+                % (key, self.name, previous.detail or 'no detail'),
+                key=key,
+                venue=self.name,
+            )
+        live = self._live_order(previous)
+        if live is not None and live.is_working:
+            return live
+        state = live.status if live is not None else 'unknown'
+        raise DuplicateOrderError(
+            'this exact order was already sent as %s (now %s). If you mean a '
+            'second one, give it its own client_order_id or pass '
+            'allow_duplicate=True.' % (previous.order_id or key, state or 'finished'),
+            key=key,
+            order=live or previous.order,
+            venue=self.name,
+        )
+
+    def _live_order(self, submission) -> Any:
+        """Read the venue's own state for a recorded submission."""
+        if not submission.order_id:
+            return submission.order
+        try:
+            found = self.get_order(submission.order_id)
+        except Exception:
+            return submission.order
+        return found if found is not None else submission.order
+
+    def _record_in_flight(self, spec) -> Submission:
+        submission = Submission(
+            key=spec.idempotency_key,
+            fingerprint=spec.fingerprint,
+            symbol=spec.symbol,
+        )
+        self._submissions[submission.key] = submission
+        return submission
+
+    def submissions(self) -> dict[str, Submission]:
+        """Everything this venue has sent, by key."""
+        return dict(self._submissions)
+
+    def unresolved(self) -> list[Submission]:
+        """Submissions whose fate is unknown. Should always be empty."""
+        return [s for s in self._submissions.values() if s.is_unresolved]
+
+    def resolve(self, key, *, order_id=None) -> Submission:
+        """Record what you found out about an unresolved submission."""
+        submission = self._submissions.get(key)
+        if submission is None:
+            raise NotFoundError(
+                'no submission %r on %s' % (key, self.name), venue=self.name
+            )
+        if order_id is None:
+            raise ConfigError(
+                'say which order it became, or call forget()', venue=self.name
+            )
+        submission.state = 'submitted'
+        submission.order_id = str(order_id)
+        submission.order = None
+        return submission
+
+    def forget(self, key) -> None:
+        """Drop a submission, having confirmed the venue never accepted it."""
+        self._submissions.pop(key, None)
 
     def cancel(self, order_id) -> Any:
         raise NotImplementedError

@@ -39,5 +39,29 @@ First cut. One interface, two kinds of venue.
   one-sends-other, so there is no window where a naked entry is working. A
   percent trail is refused rather than guessed at.
 
+**Idempotency and reconnection**
+
+- The same `OrderSpec` submitted twice does not become two orders. `place()`
+  is now a template on `Venue`, so every venue inherits it: a working order is
+  returned after being re-read from the broker, a finished one raises
+  `DuplicateOrderError`, and one that never got an answer raises
+  `UnresolvedOrderError`. Identity is `spec.idempotency_key` — your
+  `client_order_id`, else a digest of what the order instructs.
+- A write that fails ambiguously locks its key until `resolve()` or `forget()`.
+  A clean refusal does not: a bad symbol leaves you free to retry, which is
+  why `_submit` distinguishes connection-shaped failures from bad arguments
+  rather than calling everything ambiguous.
+- `flatten()` goes through the same guard, so flattening a position twice does
+  not sell it twice.
+- IBKR: a read may reconnect and be asked again; a write never does, and it is
+  checked before contract resolution, because resolving a symbol is a read and
+  would otherwise repair the socket behind the caller's back.
+- IBKR: `resync()` rebuilds bracket groups from IB's own open orders on every
+  connect, reports what it recovered, dropped and could not place, and
+  `unprotected_positions()` answers the question that matters after a drop —
+  which open positions have no working stop. Optional `state_path` persists
+  the registry so a restarted process is not blind; anything restored from it
+  is marked unresolved, because this process never saw IB confirm it.
+
 Not here yet: Alpaca equities (ccxt's Alpaca is the crypto side only),
 Tradier, TradeStation, market data beyond a single quote.
