@@ -37,6 +37,7 @@ from typing import Any
 
 from ..enums import Env, OrderType, Side, TimeInForce
 from ..errors import (
+    INSTALL_HINT,
     AuthError,
     BrokerError,
     ConfigError,
@@ -139,7 +140,7 @@ class AlpacaVenue(Venue):
                 from alpaca.trading.client import TradingClient
             except ImportError as exc:
                 raise ConfigError(
-                    'alpaca-py is not installed; pip install "anybroker[alpaca]"',
+                    'alpaca-py is not installed; ' + INSTALL_HINT % 'alpaca',
                     venue=self.name,
                 ) from exc
             key, secret = self._resolve_keys()

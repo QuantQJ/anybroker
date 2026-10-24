@@ -1,6 +1,7 @@
 """Exceptions. Every failure raises; nothing returns an error dictionary."""
 
 __all__ = [
+    'INSTALL_HINT',
     'BrokerError',
     'ConfigError',
     'UnsupportedError',
@@ -139,3 +140,11 @@ class TransportError(BrokerError):
     def __init__(self, message, *, ambiguous=False, **kw) -> None:
         super().__init__(message, **kw)
         self.ambiguous = ambiguous
+
+
+#: How to install a venue's SDK. These libraries are distributed through
+#: GitHub and are not on PyPI, so a bare ``pip install anybroker[...]`` would
+#: not resolve -- the hint has to carry the repository.
+INSTALL_HINT = (
+    'pip install "anybroker[%s] @ git+https://github.com/QuantQJ/anybroker.git"'
+)

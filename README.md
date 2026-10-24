@@ -326,19 +326,21 @@ is not a rejection.
 ## Install
 
 ```sh
-pip install anybroker                  # the interface, no dependencies
-pip install "anybroker[crypto]"        # + ccxt
-pip install "anybroker[ibkr]"          # + ib_insync
-pip install "anybroker[alpaca]"        # + alpaca-py
-pip install "anybroker[tradovate]"     # + tradovate-client
-pip install "anybroker[all]"           # ccxt + ib_insync + alpaca-py
+pip install "git+https://github.com/QuantQJ/anybroker.git"
+
+# with a venue's SDK
+pip install "anybroker[crypto] @ git+https://github.com/QuantQJ/anybroker.git"
+pip install "anybroker[ibkr] @ git+https://github.com/QuantQJ/anybroker.git"
+pip install "anybroker[alpaca] @ git+https://github.com/QuantQJ/anybroker.git"
+pip install "anybroker[tradovate] @ git+https://github.com/QuantQJ/anybroker.git"
+pip install "anybroker[all] @ git+https://github.com/QuantQJ/anybroker.git"
 ```
 
 `[all]` deliberately leaves out `tradovate-client`, because it is not on PyPI
 yet — install it from source:
 
 ```sh
-pip install "git+https://github.com/QuantQJ/tradovate-client"
+pip install "git+https://github.com/QuantQJ/tradovate-client.git"
 ```
 
 ```python

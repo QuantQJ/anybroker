@@ -20,6 +20,7 @@ from typing import Any
 
 from ..enums import Env, OrderType, Side, TimeInForce
 from ..errors import (
+    INSTALL_HINT,
     AuthError,
     BrokerError,
     ConfigError,
@@ -127,7 +128,7 @@ class CcxtVenue(Venue):
             import ccxt
         except ImportError as exc:
             raise ConfigError(
-                'ccxt is not installed; pip install "anybroker[crypto]"',
+                'ccxt is not installed; ' + INSTALL_HINT % 'crypto',
                 venue=self.exchange_id,
             ) from exc
         if self.exchange_id not in ccxt.exchanges:

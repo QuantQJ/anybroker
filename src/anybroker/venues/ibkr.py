@@ -33,6 +33,7 @@ from typing import Any
 
 from ..enums import Env, OrderType, Side, TimeInForce
 from ..errors import (
+    INSTALL_HINT,
     ConfigError,
     DisconnectedError,
     NotFoundError,
@@ -215,7 +216,7 @@ class IbkrVenue(Venue):
                 from ib_insync import IB
             except ImportError as exc:
                 raise ConfigError(
-                    'ib_insync is not installed; pip install "anybroker[ibkr]"',
+                    'ib_insync is not installed; ' + INSTALL_HINT % 'ibkr',
                     venue=self.name,
                 ) from exc
             self._ib = IB()

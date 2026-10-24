@@ -11,6 +11,7 @@ ccxt without being named here one by one.
 """
 
 from .enums import Env
+from .errors import INSTALL_HINT
 from .venue import Venue
 
 __all__ = ['open_venue', 'available', 'NATIVE_VENUES', 'CCXT_ONLY_NOTE']
@@ -73,7 +74,7 @@ def available() -> dict:
         if found:
             native.append(name)
         else:
-            missing[name] = 'pip install "%s"' % extra
+            missing[name] = INSTALL_HINT % extra.split('[')[-1].rstrip(']')
     out = {
         'native': native,
         'native_missing': missing,
@@ -84,7 +85,20 @@ def available() -> dict:
     try:
         import ccxt
 
-        out['ccxt'] = sorted(ccxt.exchanges)
+        # getattr, not ccxt.exchanges: anything importable as "ccxt" lands
+        # here, including a source checkout or a stray ccxt.py in the
+        # working directory, and this is the function someone runs *because*
+        # something is already confusing them.
+        exchanges = getattr(ccxt, 'exchanges', None)
+        if exchanges is None:
+            out['missing_ccxt'] = (
+                'something is importable as "ccxt" but it is not the ccxt '
+                'package -- a source checkout or a ccxt.py in the working '
+                'directory will do it. Installed at: %s'
+                % (getattr(ccxt, '__file__', None) or '(namespace package)')
+            )
+        else:
+            out['ccxt'] = sorted(exchanges)
     except ImportError:
-        out['missing_ccxt'] = 'pip install "anybroker[crypto]"'
+        out['missing_ccxt'] = INSTALL_HINT % 'crypto'
     return out

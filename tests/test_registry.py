@@ -105,3 +105,44 @@ def test_a_missing_driver_is_reported_with_how_to_get_it(monkeypatch):
     assert report['native'] == []
     assert set(report['native_missing']) == set(NATIVE_VENUES)
     assert 'pip install' in report['missing_ccxt']
+
+
+# ── the install hints have to name the repository ──────────────────────────
+#
+# These libraries live on GitHub and are not published to PyPI, so a bare
+# `pip install "anybroker[ibkr]"` is advice that cannot work.
+
+
+def test_every_install_hint_names_the_repository():
+    from anybroker.registry import available
+
+    out = available()
+    hints = list(out['native_missing'].values())
+    if 'missing_ccxt' in out:
+        hints.append(out['missing_ccxt'])
+    assert hints, 'nothing was missing, so nothing was asserted'
+    for hint in hints:
+        if 'pip install' not in hint:
+            continue  # the "not actually ccxt" diagnostic
+        assert 'github.com/QuantQJ/anybroker' in hint, hint
+
+
+def test_a_module_called_ccxt_that_is_not_ccxt_does_not_crash(monkeypatch):
+    """A source checkout or a stray ccxt.py in the working directory.
+
+    available() is what someone runs *because* something already confuses
+    them, so it has to survive the confusion.
+    """
+    import sys
+    import types
+
+    from anybroker.registry import available
+
+    impostor = types.ModuleType('ccxt')  # no .exchanges
+    impostor.__file__ = '/somewhere/ccxt/__init__.py'
+    monkeypatch.setitem(sys.modules, 'ccxt', impostor)
+
+    out = available()
+    assert out['ccxt'] == []
+    assert 'not the ccxt package' in out['missing_ccxt']
+    assert '/somewhere/ccxt/__init__.py' in out['missing_ccxt']

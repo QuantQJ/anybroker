@@ -26,6 +26,7 @@ from typing import Any
 
 from ..enums import Env, OrderType, Side, TimeInForce
 from ..errors import (
+    INSTALL_HINT,
     BrokerError,
     ConfigError,
     NotFoundError,
@@ -130,9 +131,9 @@ class TradovateVenue(Venue):
             except ImportError as exc:
                 raise ConfigError(
                     'tradovate-client is not installed; '
-                    'pip install "anybroker[tradovate]" '
-                    '(or pip install git+https://github.com/QuantQJ/'
-                    'tradovate-client)',
+                    + INSTALL_HINT % 'tradovate'
+                    + ' (or pip install "git+https://github.com/QuantQJ/'
+                    'tradovate-client.git")',
                     venue=self.name,
                 ) from exc
             kw = {k: v for k, v in self._client_kw.items() if v is not None}

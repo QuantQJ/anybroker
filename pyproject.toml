@@ -29,7 +29,7 @@ dependencies = []
 [project.optional-dependencies]
 crypto = ["ccxt>=4.4.0"]
 ibkr = ["ib_insync>=0.9.86"]
-tradovate = ["tradovate-client>=0.1.0"]
+tradovate = ["tradovate-client @ git+https://github.com/QuantQJ/tradovate-client.git"]
 alpaca = ["alpaca-py>=0.33"]
 all = ["ccxt>=4.4.0", "ib_insync>=0.9.86", "alpaca-py>=0.33"]
 dev = [
@@ -46,6 +46,12 @@ dev = [
 Homepage = "https://github.com/QuantQJ/anybroker"
 Source = "https://github.com/QuantQJ/anybroker"
 Issues = "https://github.com/QuantQJ/anybroker/issues"
+
+[tool.hatch.metadata]
+# The venue extras install from git: these libraries are distributed
+# through GitHub and not published to PyPI, so a version specifier
+# would never resolve. Hatchling requires this to be explicit.
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/anybroker"]
