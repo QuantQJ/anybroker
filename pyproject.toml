@@ -1,0 +1,42 @@
+[build-system]
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
+
+[project]
+name = "anybroker"
+version = "0.1.0"
+description = "One interface over the brokers you actually trade: ccxt for crypto, native venues for the futures and retail brokers ccxt has never had."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [{ name = "QuantQJ" }]
+keywords = ["trading", "broker", "futures", "ibkr", "tradovate", "ccxt", "orders"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Financial and Insurance Industry",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Office/Business :: Financial :: Investment",
+]
+dependencies = []
+
+[project.optional-dependencies]
+crypto = ["ccxt>=4.4.0"]
+ibkr = ["ib_insync>=0.9.86"]
+tradovate = ["tradovate-client>=0.1.0"]
+all = ["ccxt>=4.4.0", "ib_insync>=0.9.86"]
+dev = ["pytest>=7.4"]
+
+[project.urls]
+Homepage = "https://github.com/QuantQJ/anybroker"
+Source = "https://github.com/QuantQJ/anybroker"
+Issues = "https://github.com/QuantQJ/anybroker/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/anybroker"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "tests"]
