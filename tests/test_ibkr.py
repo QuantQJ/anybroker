@@ -19,8 +19,8 @@ from anybroker.venues.ibkr import (
 )
 from fakes import FakeIB, fake_position
 
-#: Accounts IB would hand back, by kind. QJ's own are U1234567 (live) and
-#: DU1234567 (paper), which is where the D-prefix rule comes from.
+#: Accounts IB would hand back, by kind. IB prefixes simulated accounts with
+#: D (DU, DF); live accounts have no D.
 LIVE_ACCOUNTS = ('U1234567',)
 PAPER_ACCOUNTS = ('DU1234567',)
 
