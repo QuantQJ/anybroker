@@ -273,7 +273,7 @@ class IbkrVenue(Venue):
 
     # ── bracket state across a reconnect ────────────────────────────────────
 
-    def _after_place(self, spec, order) -> None:
+    def _persist_submissions(self) -> None:
         self._save_state()
 
     def brackets(self) -> dict:
@@ -353,30 +353,10 @@ class IbkrVenue(Venue):
             'working': sum(1 for t in trades if _order_of(t, self.name).is_working),
         }
 
-    def unprotected_positions(self) -> list:
-        """Open positions with no working stop against them.
-
-        The question worth asking after a socket drop. A bracket whose stop
-        was cancelled during a reset window leaves the position naked, and
-        nothing in IB tells you that unless you ask.
-        """
-        working = [o for o in self.list_orders() if o.is_working]
-        protected = {
-            o.symbol
-            for o in working
-            if o.order_type
-            in (
-                OrderType.STOP,
-                OrderType.STOP_LIMIT,
-                OrderType.TRAILING_STOP,
-                OrderType.TRAILING_STOP_LIMIT,
-            )
-        }
-        return [
-            p
-            for p in self.list_positions()
-            if not p.is_flat and p.symbol not in protected
-        ]
+    # ``protection`` and ``unprotected_positions`` are inherited from Venue,
+    # which checks the side and the quantity of each stop rather than only the
+    # symbol. A bracket whose stop was cancelled during IB's reset window
+    # leaves the position naked, and nothing in IB tells you unless you ask.
 
     # ── optional on-disk state ──────────────────────────────────────────────
 

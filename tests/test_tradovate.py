@@ -95,8 +95,8 @@ class FakeTradovate:
         self._log('liquidate', contract_id, **kw)
         return {'orderId': 99}
 
-    def flatten_all(self, cancel_first=True):
-        self._log('flatten_all', cancel_first=cancel_first)
+    def flatten_all(self, account=None, cancel_first=True):
+        self._log('flatten_all', account=account, cancel_first=cancel_first)
         return {'cancelled': [1], 'liquidated': [11]}
 
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from .enums import Env, OrderType
+from .enums import Env, OrderType, Side
 from .errors import (
     ConfigError,
     DuplicateOrderError,
@@ -21,9 +21,26 @@ from .errors import (
 )
 from .models import Account, Order, Position, Quote
 
-__all__ = ['Capabilities', 'Venue', 'Submission', 'TRAILING_FORMS']
+__all__ = [
+    'Capabilities',
+    'Venue',
+    'Submission',
+    'TRAILING_FORMS',
+    'PROTECTIVE_ORDER_TYPES',
+]
 
 ALL_ORDER_TYPES = frozenset(OrderType)
+
+#: Order types that can protect an open position. A limit order cannot: a
+#: profit target is not a stop.
+PROTECTIVE_ORDER_TYPES = frozenset(
+    {
+        OrderType.STOP,
+        OrderType.STOP_LIMIT,
+        OrderType.TRAILING_STOP,
+        OrderType.TRAILING_STOP_LIMIT,
+    }
+)
 
 #: How a trailing distance can be expressed. Most venues take one and not the
 #: other -- of the 19 ccxt exchanges with any trailing support, 16 accept only
@@ -217,18 +234,28 @@ class Venue:
                 submission.detail = str(exc)
             else:
                 self._submissions.pop(key, None)
+            # Persist on the failure path above all. An unresolved submission
+            # is the one piece of state that must survive a restart, because
+            # the order may be working -- saving only on success loses exactly
+            # the case that matters.
+            self._persist_submissions()
             raise
         except Exception:
             self._submissions.pop(key, None)
+            self._persist_submissions()
             raise
         submission.state = 'submitted'
         submission.order_id = str(getattr(order, 'id', '') or '')
         submission.order = order
-        self._after_place(spec, order)
+        self._persist_submissions()
         return order
 
-    def _after_place(self, spec, order) -> None:
-        """Hook for a venue that persists what it has sent. Default: nothing."""
+    def _persist_submissions(self) -> None:
+        """Hook for a venue that writes its submissions down. Default: nothing.
+
+        Called on every transition -- submitted, unresolved, dropped, resolved
+        and forgotten -- so no reachable state was never saved.
+        """
 
     def _place(self, spec) -> Order:
         """Actually send it. Each venue implements this; callers use place()."""
@@ -305,11 +332,13 @@ class Venue:
         submission.state = 'submitted'
         submission.order_id = str(order_id)
         submission.order = None
+        self._persist_submissions()
         return submission
 
     def forget(self, key) -> None:
         """Drop a submission, having confirmed the venue never accepted it."""
         self._submissions.pop(key, None)
+        self._persist_submissions()
 
     def cancel(self, order_id) -> Any:
         raise NotImplementedError
@@ -330,6 +359,56 @@ class Venue:
     def flatten(self, symbol) -> Any:
         """Close one symbol at market."""
         raise NotImplementedError
+
+    # ── protection ──────────────────────────────────────────────────────────
+
+    def protection(self) -> dict:
+        """How much of each open position has a working stop behind it.
+
+        A long is protected by a **sell** stop and a short by a **buy** stop,
+        so the side is checked and not merely the order type -- a buy stop on
+        the same symbol as a long protects nothing. Quantity is checked too: a
+        one-lot stop does not cover five lots.
+
+        Returns, per open position, ``{'qty', 'side', 'protected_qty',
+        'exposed_qty', 'orders'}``.
+        """
+        stops = [
+            o
+            for o in self.list_orders()
+            if o.is_working and o.order_type in PROTECTIVE_ORDER_TYPES
+        ]
+        out = {}
+        for position in self.list_positions():
+            if position.is_flat:
+                continue
+            wanted = Side.SELL if position.qty > 0 else Side.BUY
+            covering = [
+                o for o in stops if o.symbol == position.symbol and o.side is wanted
+            ]
+            protected = sum(abs(float(o.qty or 0)) for o in covering)
+            size = abs(float(position.qty))
+            out[position.symbol] = {
+                'qty': position.qty,
+                'side': position.side,
+                'protected_qty': protected,
+                'exposed_qty': max(0.0, size - protected),
+                'orders': [o.id for o in covering],
+            }
+        return out
+
+    def unprotected_positions(self) -> list[Position]:
+        """Open positions with no stop, or not enough stop, behind them.
+
+        A position whose stop covers only part of it is listed: partly covered
+        is not covered.
+        """
+        cover = self.protection()
+        return [
+            p
+            for p in self.list_positions()
+            if not p.is_flat and cover.get(p.symbol, {}).get('exposed_qty', 0) > 0
+        ]
 
     def flatten_all(self, *, cancel_first=True) -> dict:
         """Cancel working orders then close every position.

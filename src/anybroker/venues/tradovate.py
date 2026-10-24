@@ -306,7 +306,11 @@ class TradovateVenue(Venue):
         return _order_of(reply or {}, self.name)
 
     def flatten_all(self, *, cancel_first=True) -> dict:
-        result = self._guard(self.client.flatten_all, cancel_first=cancel_first)
+        # account= is passed through, so flattening one account does not
+        # cancel another account's working orders on the same login.
+        result = self._guard(
+            self.client.flatten_all, account=self.account, cancel_first=cancel_first
+        )
         if isinstance(result, dict):
             return {
                 'cancelled': list(result.get('cancelled') or []),
@@ -355,16 +359,71 @@ class TradovateVenue(Venue):
         return TransportError('%s: %s' % (type(exc).__name__, exc), venue=self.name)
 
 
+#: Tradovate reports an order's fate in ``failureReason`` on an HTTP 200, and
+#: ``Success`` is one of its own documented values -- so the field being
+#: present does not mean the order failed. Only another value does.
+SUCCESS_REASON = 'Success'
+
+
 def _order_of(reply, venue, spec=None) -> Order:
-    """Tradovate replies with the order id; the spec fills in the rest."""
-    reply = reply if isinstance(reply, dict) else {'raw': reply}
-    order_id = (
-        reply.get('orderId')
-        or reply.get('id')
-        or (reply.get('failureReason') and '')
-        or ''
+    """Normalise whatever tradovate-client handed back.
+
+    Two shapes arrive here. A *read* returns tradovate-client's typed
+    ``Order``, which already carries the id, status, side, quantity and
+    prices. A *write* returns Tradovate's raw result dict, with an ``orderId``
+    and possibly a ``failureReason``. Treating the typed object as a dict
+    loses the id and the status, so a working order reads as finished.
+    """
+    if reply is None:
+        return Order(id='', venue=venue)
+    if not isinstance(reply, dict):
+        return _from_typed(reply, venue, spec)
+    return _from_result(reply, venue, spec)
+
+
+def _from_typed(obj, venue, spec=None) -> Order:
+    """Map tradovate-client's own ``Order`` onto this library's."""
+    side_value = str(getattr(obj, 'side', '') or '').lower()
+    kind = str(getattr(obj, 'order_type', '') or '')
+    reverse = {v: k for k, v in TV_ORDER_TYPES.items()}
+    order = Order(
+        id=str(getattr(obj, 'id', '') or ''),
+        venue=venue,
+        symbol=str(getattr(obj, 'symbol', '') or (spec.symbol if spec else '')),
+        side=Side(side_value) if side_value in ('buy', 'sell') else None,
+        qty=_f(getattr(obj, 'qty', 0)),
+        order_type=reverse.get(kind),
+        status=str(getattr(obj, 'status', '') or ''),
+        filled_qty=_f(getattr(obj, 'filled_qty', 0)),
+        avg_fill_price=_f(getattr(obj, 'avg_fill_price', 0)),
+        limit_price=getattr(obj, 'limit_price', None),
+        stop_price=getattr(obj, 'stop_price', None),
+        client_order_id=getattr(obj, 'client_order_id', None) or None,
+        raw={'order': obj},
     )
-    order = Order(id=str(order_id or ''), venue=venue, raw=reply)
+    if order.side is None and spec is not None:
+        order.side = spec.side
+    return order
+
+
+def _from_result(reply, venue, spec=None) -> Order:
+    """Map Tradovate's raw order result, raising only on a real refusal."""
+    reason = reply.get('failureReason')
+    if reason not in (None, '', SUCCESS_REASON):
+        raise RejectedError(
+            'Tradovate refused the order: %s%s'
+            % (
+                reason,
+                ' (%s)' % reply['failureText'] if reply.get('failureText') else '',
+            ),
+            venue=venue,
+            detail=reply,
+        )
+    order = Order(
+        id=str(reply.get('orderId') or reply.get('id') or ''),
+        venue=venue,
+        raw=reply,
+    )
     if spec is not None:
         order.symbol = spec.symbol
         order.side = spec.side
@@ -373,19 +432,9 @@ def _order_of(reply, venue, spec=None) -> Order:
         order.limit_price = spec.limit_price
         order.stop_price = spec.stop_price
         order.client_order_id = spec.client_order_id
-    for source, _attr in (('ordStatus', 'status'), ('status', 'status')):
+    for source in ('ordStatus', 'status'):
         if reply.get(source):
             order.status = str(reply[source])
-    if reply.get('failureReason'):
-        raise RejectedError(
-            'Tradovate refused the order: %s%s'
-            % (
-                reply['failureReason'],
-                ' (%s)' % reply['failureText'] if reply.get('failureText') else '',
-            ),
-            venue=venue,
-            detail=reply,
-        )
     return order
 
 
