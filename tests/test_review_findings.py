@@ -53,7 +53,7 @@ class TypedOrder:
 
     def __init__(self, **kw):
         self.id = kw.get('id', 4242)
-        self.symbol = kw.get('symbol', 'MNQZ6')
+        self.symbol = kw.get('symbol', 'ABCZ6')
         self.side = kw.get('side', 'Buy')
         self.qty = kw.get('qty', 2)
         self.order_type = kw.get('order_type', 'Limit')
@@ -126,7 +126,7 @@ def test_a_typed_order_keeps_its_side_size_and_prices():
     assert order.qty == 2
     assert order.order_type is OrderType.LIMIT
     assert order.limit_price == 20150.25
-    assert order.symbol == 'MNQZ6'
+    assert order.symbol == 'ABCZ6'
 
 
 def test_a_finished_typed_order_still_reads_as_finished():
@@ -184,7 +184,7 @@ def test_an_unresolved_submission_is_written_to_disk():
     state = Path(tempfile.mkdtemp()) / 'state.json'
     v = ib_venue(ib=DyingIB(accounts=('DU1234567',)), state_path=state)
     with pytest.raises(TransportError) as caught:
-        v.market('MNQZ6', Side.BUY, 1)
+        v.market('ABCZ6', Side.BUY, 1)
     assert caught.value.ambiguous is True
     assert len(v.unresolved()) == 1
     saved = json.loads(state.read_text())['submissions']
@@ -198,7 +198,7 @@ def test_an_unresolved_submission_survives_a_restart():
         ib=DyingIB(accounts=('DU1234567',)), state_path=state, client_id=5002
     )
     with pytest.raises(TransportError):
-        first.market('MNQZ6', Side.BUY, 1)
+        first.market('ABCZ6', Side.BUY, 1)
 
     second = IbkrVenue(
         Env.PAPER,
@@ -222,7 +222,7 @@ def test_the_same_order_is_still_blocked_after_a_restart():
         ib=DyingIB(accounts=('DU1234567',)), state_path=state, client_id=5004
     )
     with pytest.raises(TransportError):
-        first.place(OrderSpec('MNQZ6', Side.BUY, 1, client_order_id='k1'))
+        first.place(OrderSpec('ABCZ6', Side.BUY, 1, client_order_id='k1'))
 
     ib = FakeIB(accounts=('DU1234567',))
     second = IbkrVenue(
@@ -234,7 +234,7 @@ def test_the_same_order_is_still_blocked_after_a_restart():
         contract_factory=lambda s: FakeContract(s),
     ).connect()
     with pytest.raises(UnresolvedOrderError):
-        second.place(OrderSpec('MNQZ6', Side.BUY, 1, client_order_id='k1'))
+        second.place(OrderSpec('ABCZ6', Side.BUY, 1, client_order_id='k1'))
     assert ib.placed == [], 'and nothing may reach the broker'
 
 
@@ -242,7 +242,7 @@ def test_resolving_and_forgetting_are_persisted_too():
     state = Path(tempfile.mkdtemp()) / 'state.json'
     v = ib_venue(ib=DyingIB(accounts=('DU1234567',)), state_path=state, client_id=5006)
     with pytest.raises(TransportError):
-        v.place(OrderSpec('MNQZ6', Side.BUY, 1, client_order_id='k2'))
+        v.place(OrderSpec('ABCZ6', Side.BUY, 1, client_order_id='k2'))
     v.forget('k2')
     saved = json.loads(state.read_text())['submissions']
     assert saved == [], 'forgetting must reach the file as well'
@@ -255,76 +255,76 @@ def test_resolving_and_forgetting_are_persisted_too():
 
 def test_a_buy_stop_does_not_protect_a_long():
     """The reported case: wrong direction, counted as cover."""
-    v = ib_venue(positions=[fake_position('MNQZ6', 5)], client_id=5010)
-    v.stop('MNQZ6', Side.BUY, 5, 20500.0)
-    assert [p.symbol for p in v.unprotected_positions()] == ['MNQZ6']
-    assert v.protection()['MNQZ6']['exposed_qty'] == 5.0
-    assert v.protection()['MNQZ6']['protected_qty'] == 0.0
+    v = ib_venue(positions=[fake_position('ABCZ6', 5)], client_id=5010)
+    v.stop('ABCZ6', Side.BUY, 5, 20500.0)
+    assert [p.symbol for p in v.unprotected_positions()] == ['ABCZ6']
+    assert v.protection()['ABCZ6']['exposed_qty'] == 5.0
+    assert v.protection()['ABCZ6']['protected_qty'] == 0.0
 
 
 def test_a_sell_stop_does_not_protect_a_short():
-    v = ib_venue(positions=[fake_position('MNQZ6', -3)], client_id=5011)
-    v.stop('MNQZ6', Side.SELL, 3, 19500.0)
-    assert [p.symbol for p in v.unprotected_positions()] == ['MNQZ6']
+    v = ib_venue(positions=[fake_position('ABCZ6', -3)], client_id=5011)
+    v.stop('ABCZ6', Side.SELL, 3, 19500.0)
+    assert [p.symbol for p in v.unprotected_positions()] == ['ABCZ6']
 
 
 def test_an_undersized_stop_leaves_the_rest_exposed():
     """The other reported case: one lot of stop against five of position."""
-    v = ib_venue(positions=[fake_position('MNQZ6', 5)], client_id=5012)
-    v.stop('MNQZ6', Side.SELL, 1, 20000.0)
-    cover = v.protection()['MNQZ6']
+    v = ib_venue(positions=[fake_position('ABCZ6', 5)], client_id=5012)
+    v.stop('ABCZ6', Side.SELL, 1, 20000.0)
+    cover = v.protection()['ABCZ6']
     assert cover['protected_qty'] == 1.0
     assert cover['exposed_qty'] == 4.0
-    assert [p.symbol for p in v.unprotected_positions()] == ['MNQZ6'], (
+    assert [p.symbol for p in v.unprotected_positions()] == ['ABCZ6'], (
         'partly covered is not covered'
     )
 
 
 def test_a_correctly_sized_stop_on_the_right_side_does_protect():
-    v = ib_venue(positions=[fake_position('MNQZ6', 5)], client_id=5013)
-    v.stop('MNQZ6', Side.SELL, 5, 20000.0)
+    v = ib_venue(positions=[fake_position('ABCZ6', 5)], client_id=5013)
+    v.stop('ABCZ6', Side.SELL, 5, 20000.0)
     assert v.unprotected_positions() == []
-    assert v.protection()['MNQZ6']['exposed_qty'] == 0.0
+    assert v.protection()['ABCZ6']['exposed_qty'] == 0.0
 
 
 def test_a_short_is_protected_by_a_buy_stop():
-    v = ib_venue(positions=[fake_position('MNQZ6', -3)], client_id=5014)
-    v.stop('MNQZ6', Side.BUY, 3, 20500.0)
+    v = ib_venue(positions=[fake_position('ABCZ6', -3)], client_id=5014)
+    v.stop('ABCZ6', Side.BUY, 3, 20500.0)
     assert v.unprotected_positions() == []
 
 
 def test_two_partial_stops_add_up():
-    v = ib_venue(positions=[fake_position('MNQZ6', 5)], client_id=5015)
-    v.stop('MNQZ6', Side.SELL, 2, 20000.0)
-    v.stop('MNQZ6', Side.SELL, 3, 19990.0)
-    assert v.protection()['MNQZ6']['protected_qty'] == 5.0
+    v = ib_venue(positions=[fake_position('ABCZ6', 5)], client_id=5015)
+    v.stop('ABCZ6', Side.SELL, 2, 20000.0)
+    v.stop('ABCZ6', Side.SELL, 3, 19990.0)
+    assert v.protection()['ABCZ6']['protected_qty'] == 5.0
     assert v.unprotected_positions() == []
 
 
 def test_a_stop_on_another_symbol_protects_nothing():
     v = ib_venue(
-        positions=[fake_position('MNQZ6', 2), fake_position('MESZ6', 2)],
+        positions=[fake_position('ABCZ6', 2), fake_position('MESZ6', 2)],
         client_id=5016,
     )
     v.stop('MESZ6', Side.SELL, 2, 5800.0)
-    assert [p.symbol for p in v.unprotected_positions()] == ['MNQZ6']
+    assert [p.symbol for p in v.unprotected_positions()] == ['ABCZ6']
 
 
 def test_a_profit_target_is_not_protection():
-    v = ib_venue(positions=[fake_position('MNQZ6', 2)], client_id=5017)
-    v.limit('MNQZ6', Side.SELL, 2, 20500.0)
-    assert [p.symbol for p in v.unprotected_positions()] == ['MNQZ6']
+    v = ib_venue(positions=[fake_position('ABCZ6', 2)], client_id=5017)
+    v.limit('ABCZ6', Side.SELL, 2, 20500.0)
+    assert [p.symbol for p in v.unprotected_positions()] == ['ABCZ6']
     assert OrderType.LIMIT not in PROTECTIVE_ORDER_TYPES
 
 
 def test_protection_reports_every_open_position():
     v = ib_venue(
-        positions=[fake_position('MNQZ6', 2), fake_position('MESZ6', -1)],
+        positions=[fake_position('ABCZ6', 2), fake_position('MESZ6', -1)],
         client_id=5018,
     )
     cover = v.protection()
-    assert set(cover) == {'MNQZ6', 'MESZ6'}
-    assert cover['MNQZ6']['side'] is Side.BUY
+    assert set(cover) == {'ABCZ6', 'MESZ6'}
+    assert cover['ABCZ6']['side'] is Side.BUY
     assert cover['MESZ6']['side'] is Side.SELL
 
 
@@ -340,13 +340,13 @@ def test_success_is_a_documented_failure_reason_value():
 
 def test_a_reason_of_success_is_accepted():
     v = tv_venue(place_reply={'orderId': 99, 'failureReason': 'Success'})
-    order = v.place(OrderSpec('MNQZ6', Side.BUY, 1))
+    order = v.place(OrderSpec('ABCZ6', Side.BUY, 1))
     assert order.id == '99', 'Success must not be treated as a refusal'
 
 
 def test_no_reason_at_all_is_accepted():
     v = tv_venue(place_reply={'orderId': 99})
-    assert v.place(OrderSpec('MNQZ6', Side.BUY, 1)).id == '99'
+    assert v.place(OrderSpec('ABCZ6', Side.BUY, 1)).id == '99'
 
 
 @pytest.mark.parametrize(
@@ -363,7 +363,7 @@ def test_no_reason_at_all_is_accepted():
 def test_a_real_reason_still_raises(reason):
     v = tv_venue(place_reply={'failureReason': reason, 'failureText': 'detail'})
     with pytest.raises(RejectedError, match=reason):
-        v.place(OrderSpec('MNQZ6', Side.BUY, 1))
+        v.place(OrderSpec('ABCZ6', Side.BUY, 1))
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -431,22 +431,22 @@ def test_the_raw_payload_is_the_last_resort_not_the_first():
 
 def test_a_partly_filled_stop_only_covers_what_is_left():
     """A stop for five with four filled leaves one contract of cover."""
-    ib = FakeIB(accounts=('DU1234567',), positions=[fake_position('MNQZ6', 5)])
+    ib = FakeIB(accounts=('DU1234567',), positions=[fake_position('ABCZ6', 5)])
     v = ib_venue(ib=ib, client_id=6001)
-    v.stop('MNQZ6', Side.SELL, 5, 20000.0)
+    v.stop('ABCZ6', Side.SELL, 5, 20000.0)
     ib.placed[-1].orderStatus.filled = 4.0
     ib.placed[-1].orderStatus.status = 'Submitted'
-    cover = v.protection()['MNQZ6']
+    cover = v.protection()['ABCZ6']
     assert cover['protected_qty'] == 1.0, 'remaining, not original'
     assert cover['exposed_qty'] == 4.0
-    assert [p.symbol for p in v.unprotected_positions()] == ['MNQZ6']
+    assert [p.symbol for p in v.unprotected_positions()] == ['ABCZ6']
 
 
 def test_an_untouched_stop_still_covers_its_full_size():
-    ib = FakeIB(accounts=('DU1234567',), positions=[fake_position('MNQZ6', 5)])
+    ib = FakeIB(accounts=('DU1234567',), positions=[fake_position('ABCZ6', 5)])
     v = ib_venue(ib=ib, client_id=6002)
-    v.stop('MNQZ6', Side.SELL, 5, 20000.0)
-    assert v.protection()['MNQZ6']['exposed_qty'] == 0.0
+    v.stop('ABCZ6', Side.SELL, 5, 20000.0)
+    assert v.protection()['ABCZ6']['exposed_qty'] == 0.0
 
 
 def test_the_in_flight_record_is_written_before_the_send():
@@ -464,7 +464,7 @@ def test_the_in_flight_record_is_written_before_the_send():
     v = ib_venue(
         ib=CheckingIB(accounts=('DU1234567',)), state_path=state, client_id=6003
     )
-    v.place(OrderSpec('MNQZ6', Side.BUY, 1, client_order_id='k3'))
+    v.place(OrderSpec('ABCZ6', Side.BUY, 1, client_order_id='k3'))
     assert len(seen['on_disk']) == 1, (
         'the record must be on disk before the request leaves'
     )
@@ -482,7 +482,7 @@ def test_a_restored_in_flight_record_blocks_a_resend():
         ib=CheckingIB(accounts=('DU1234567',)), state_path=state, client_id=6004
     )
     with pytest.raises(TransportError):
-        first.place(OrderSpec('MNQZ6', Side.BUY, 1, client_order_id='k4'))
+        first.place(OrderSpec('ABCZ6', Side.BUY, 1, client_order_id='k4'))
 
     ib = FakeIB(accounts=('DU1234567',))
     second = IbkrVenue(
@@ -496,7 +496,7 @@ def test_a_restored_in_flight_record_blocks_a_resend():
     from anybroker import UnresolvedOrderError
 
     with pytest.raises(UnresolvedOrderError):
-        second.place(OrderSpec('MNQZ6', Side.BUY, 1, client_order_id='k4'))
+        second.place(OrderSpec('ABCZ6', Side.BUY, 1, client_order_id='k4'))
     assert ib.placed == []
 
 
@@ -510,7 +510,7 @@ def test_a_clean_failure_still_leaves_no_record_behind():
 
     v = ib_venue(ib=Refusing(accounts=('DU1234567',)), state_path=state, client_id=6006)
     with pytest.raises(TransportError):
-        v.place(OrderSpec('MNQZ6', Side.BUY, 1, client_order_id='k5'))
+        v.place(OrderSpec('ABCZ6', Side.BUY, 1, client_order_id='k5'))
     assert v.submissions() == {}
     assert json.loads(state.read_text())['submissions'] == []
 
@@ -555,7 +555,7 @@ def test_a_refusal_crosses_the_library_boundary_as_a_refusal(monkeypatch):
 
     v = TradovateVenue(Env.PAPER, client=Refusing(), account='ACCOUNT_A')
     with pytest.raises(RejectedError) as caught:
-        v.place(OrderSpec('MNQZ6', Side.BUY, 1))
+        v.place(OrderSpec('ABCZ6', Side.BUY, 1))
     assert caught.value.detail == 'MaxPosLimitReached'
 
 
@@ -573,7 +573,7 @@ def test_the_same_holds_against_the_real_library():
 
     v = TradovateVenue(Env.PAPER, client=Refusing(), account='ACCOUNT_A')
     with pytest.raises(RejectedError) as caught:
-        v.place(OrderSpec('MNQZ6', Side.BUY, 1))
+        v.place(OrderSpec('ABCZ6', Side.BUY, 1))
     assert caught.value.detail == 'InvalidPrice'
 
 
@@ -586,4 +586,4 @@ def test_a_genuine_transport_failure_is_still_transport():
 
     v = TradovateVenue(Env.PAPER, client=Dying(), account='ACCOUNT_A')
     with pytest.raises(TE):
-        v.place(OrderSpec('MNQZ6', Side.BUY, 1))
+        v.place(OrderSpec('ABCZ6', Side.BUY, 1))

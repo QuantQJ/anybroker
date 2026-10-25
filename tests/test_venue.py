@@ -14,6 +14,6 @@ def test_asking_a_venue_for_a_quote_it_does_not_serve_says_so():
     venue = TradovateVenue(Env.PAPER)
     assert venue.capabilities.supports_quotes is False
     with pytest.raises(UnsupportedError) as caught:
-        venue.get_quote('MNQZ6')
+        venue.get_quote('ABCZ6')
     assert 'supports_quotes' in str(caught.value)
     assert 'tradovate' in str(caught.value)

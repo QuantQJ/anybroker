@@ -7,7 +7,7 @@ from anybroker import open_venue, Env, Side
 
 ib = open_venue("ibkr", Env.PAPER, client_id=7788, port=4002)  # see below
 with ib:
-    ib.limit("MNQZ6", Side.BUY, 2, 20150.25)
+    ib.limit("ABCZ6", Side.BUY, 2, 20150.25)
     print(ib.list_positions())
 
 kr = open_venue("krakenfutures", Env.LIVE, api_key="...", secret="...")
@@ -35,8 +35,8 @@ anybroker
 
 ```python
 tv = open_venue("tradovate", Env.PAPER, credential_path="/secure/key.json")
-tv.limit("MNQZ6", Side.BUY, 2, 20150.25)
-tv.place(OrderSpec("MNQZ6", Side.BUY, 2, take_profit=20200.0, stop_loss=20050.0))
+tv.limit("ABCZ6", Side.BUY, 2, 20150.25)
+tv.place(OrderSpec("ABCZ6", Side.BUY, 2, take_profit=20200.0, stop_loss=20050.0))
 ```
 
 Tradovate's paper environment is a different host with different credentials,
@@ -82,7 +82,7 @@ That beats silently sending a test order to a live book.
 from anybroker import OrderSpec, OrderType, Side, TimeInForce
 
 spec = OrderSpec(
-    "MNQZ6",
+    "ABCZ6",
     Side.BUY,
     2,
     OrderType.LIMIT,
@@ -100,12 +100,12 @@ stop without a distance, or a market order carrying a price all raise
 Convenience methods for the common cases:
 
 ```python
-venue.market("MNQZ6", Side.BUY, 2)
-venue.limit("MNQZ6", Side.BUY, 2, 20150.25)
-venue.stop("MNQZ6", Side.SELL, 2, 20100.00)
-venue.stop_limit("MNQZ6", Side.SELL, 2, 20095.00, 20100.00)
-venue.trailing_stop("MNQZ6", Side.SELL, 2, trail_amount=25.0)
-venue.trailing_stop("MNQZ6", Side.SELL, 2, trail_percent=1.5)
+venue.market("ABCZ6", Side.BUY, 2)
+venue.limit("ABCZ6", Side.BUY, 2, 20150.25)
+venue.stop("ABCZ6", Side.SELL, 2, 20100.00)
+venue.stop_limit("ABCZ6", Side.SELL, 2, 20095.00, 20100.00)
+venue.trailing_stop("ABCZ6", Side.SELL, 2, trail_amount=25.0)
+venue.trailing_stop("ABCZ6", Side.SELL, 2, trail_percent=1.5)
 ```
 
 ## Brackets
@@ -113,7 +113,7 @@ venue.trailing_stop("MNQZ6", Side.SELL, 2, trail_percent=1.5)
 An entry with a target and a protective stop, as one order:
 
 ```python
-venue.place(OrderSpec("MNQZ6", Side.BUY, 2, take_profit=20200.00, stop_loss=20050.00))
+venue.place(OrderSpec("ABCZ6", Side.BUY, 2, take_profit=20200.00, stop_loss=20050.00))
 ```
 
 Both prices are yours. **This library never calculates a stop distance or a
@@ -190,7 +190,7 @@ ambiguous one raises instead of a leg being picked for you — pass
 The same `OrderSpec` does not become two orders.
 
 ```python
-spec = OrderSpec("MNQZ6", Side.BUY, 2, OrderType.LIMIT, limit_price=20150.25)
+spec = OrderSpec("ABCZ6", Side.BUY, 2, OrderType.LIMIT, limit_price=20150.25)
 
 first = venue.place(spec)
 second = venue.place(spec)  # nothing is sent
@@ -313,7 +313,7 @@ from anybroker import (
 )
 
 try:
-    venue.market("MNQZ6", Side.BUY, 1)
+    venue.market("ABCZ6", Side.BUY, 1)
 except TransportError as exc:
     if exc.ambiguous:
         # The order may already be working. Read before you write.

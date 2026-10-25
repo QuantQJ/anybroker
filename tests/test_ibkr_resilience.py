@@ -52,7 +52,7 @@ def test_a_write_on_a_dead_socket_is_refused_and_says_what_to_do():
     v = venue()
     drop(v)
     with pytest.raises(DisconnectedError) as caught:
-        v.market('MNQZ6', Side.BUY, 1)
+        v.market('ABCZ6', Side.BUY, 1)
     text = str(caught.value)
     assert 'was not sent' in text
     assert 'unresolved, not failed' in text
@@ -81,7 +81,7 @@ def test_a_write_is_never_auto_reconnected_even_when_reads_are():
     v = venue()
     drop(v)
     with pytest.raises(DisconnectedError):
-        v.market('MNQZ6', Side.BUY, 1)
+        v.market('ABCZ6', Side.BUY, 1)
     assert v.is_connected is False, 'a write must not reconnect behind your back'
 
 
@@ -90,11 +90,11 @@ def test_a_write_is_never_auto_reconnected_even_when_reads_are():
 
 def test_placing_a_bracket_records_the_group():
     v = venue()
-    v.place(OrderSpec('MNQZ6', Side.BUY, 2, take_profit=20200.0, stop_loss=20050.0))
+    v.place(OrderSpec('ABCZ6', Side.BUY, 2, take_profit=20200.0, stop_loss=20050.0))
     groups = v.brackets()
     assert len(groups) == 1
     group = next(iter(groups.values()))
-    assert group.symbol == 'MNQZ6'
+    assert group.symbol == 'ABCZ6'
     assert len(group.child_ids) == 2
     assert group.oca_group.startswith('anybroker-')
 
@@ -102,7 +102,7 @@ def test_placing_a_bracket_records_the_group():
 def test_resync_rebuilds_the_group_from_ibs_own_orders():
     """The registry is wiped, as a fresh process would be. IB still knows."""
     v = venue()
-    v.place(OrderSpec('MNQZ6', Side.BUY, 2, take_profit=20200.0, stop_loss=20050.0))
+    v.place(OrderSpec('ABCZ6', Side.BUY, 2, take_profit=20200.0, stop_loss=20050.0))
     expected = next(iter(v.brackets().values()))
     v._brackets = {}
     report = v.resync()
@@ -117,7 +117,7 @@ def test_resync_rebuilds_the_group_from_ibs_own_orders():
 def test_connecting_resyncs():
     ib = FakeIB(accounts=('DU1234567',))
     v = IbkrVenue(Env.PAPER, client_id=8003, port=4001, ib=ib).connect()
-    v.place(OrderSpec('MNQZ6', Side.BUY, 1, stop_loss=20050.0))
+    v.place(OrderSpec('ABCZ6', Side.BUY, 1, stop_loss=20050.0))
     drop(v)
     v._brackets = {}
     v.connect()
@@ -146,7 +146,7 @@ def test_resync_reports_an_orphan_whose_parent_ib_no_longer_has():
     order.auxPrice = 20050.0
     order.orderRef = ''
     v._ib._trades = [
-        FakeTrade(order, FakeContract('MNQZ6'), FakeOrderStatus('Submitted'))
+        FakeTrade(order, FakeContract('ABCZ6'), FakeOrderStatus('Submitted'))
     ]
     report = v.resync()
     assert '55' in report['orphans']
@@ -163,21 +163,21 @@ def test_resync_on_a_dead_socket_says_so_rather_than_lying():
 
 
 def test_a_position_with_a_working_stop_is_protected():
-    v = venue(positions=[fake_position('MNQZ6', 2)])
-    v.stop('MNQZ6', Side.SELL, 2, 20050.0)
+    v = venue(positions=[fake_position('ABCZ6', 2)])
+    v.stop('ABCZ6', Side.SELL, 2, 20050.0)
     assert v.unprotected_positions() == []
 
 
 def test_a_position_with_no_stop_is_reported():
-    v = venue(positions=[fake_position('MNQZ6', 2)])
-    assert [p.symbol for p in v.unprotected_positions()] == ['MNQZ6']
+    v = venue(positions=[fake_position('ABCZ6', 2)])
+    assert [p.symbol for p in v.unprotected_positions()] == ['ABCZ6']
 
 
 def test_a_target_alone_does_not_count_as_protection():
     """A limit above the market is not a stop. Only a stop is."""
-    v = venue(positions=[fake_position('MNQZ6', 2)])
-    v.limit('MNQZ6', Side.SELL, 2, 20200.0)
-    assert [p.symbol for p in v.unprotected_positions()] == ['MNQZ6']
+    v = venue(positions=[fake_position('ABCZ6', 2)])
+    v.limit('ABCZ6', Side.SELL, 2, 20200.0)
+    assert [p.symbol for p in v.unprotected_positions()] == ['ABCZ6']
 
 
 @pytest.mark.parametrize(
@@ -189,13 +189,13 @@ def test_a_target_alone_does_not_count_as_protection():
     ],
 )
 def test_every_kind_of_stop_counts_as_protection(order_type, kw):
-    v = venue(positions=[fake_position('MNQZ6', 2)])
-    v.place(OrderSpec('MNQZ6', Side.SELL, 2, order_type, **kw))
+    v = venue(positions=[fake_position('ABCZ6', 2)])
+    v.place(OrderSpec('ABCZ6', Side.SELL, 2, order_type, **kw))
     assert v.unprotected_positions() == []
 
 
 def test_a_flat_position_is_not_unprotected():
-    v = venue(positions=[fake_position('MNQZ6', 0)])
+    v = venue(positions=[fake_position('ABCZ6', 0)])
     assert v.unprotected_positions() == []
 
 
@@ -208,7 +208,7 @@ def test_bracket_state_survives_a_process_restart(tmp_path):
     first = IbkrVenue(
         Env.PAPER, client_id=8010, port=4001, ib=ib, state_path=path
     ).connect()
-    first.place(OrderSpec('MNQZ6', Side.BUY, 1, stop_loss=20050.0))
+    first.place(OrderSpec('ABCZ6', Side.BUY, 1, stop_loss=20050.0))
     assert path.exists()
 
     # a new process, a new venue object, the same file
@@ -229,7 +229,7 @@ def test_a_restored_submission_is_treated_as_unresolved(tmp_path):
     first = IbkrVenue(
         Env.PAPER, client_id=8012, port=4001, ib=ib, state_path=path
     ).connect()
-    first.place(OrderSpec('MNQZ6', Side.BUY, 1, client_order_id='k1'))
+    first.place(OrderSpec('ABCZ6', Side.BUY, 1, client_order_id='k1'))
     assert first.submissions()['k1'].state == 'submitted'
 
     second = IbkrVenue(
@@ -250,7 +250,7 @@ def test_state_from_a_different_environment_is_ignored(tmp_path):
         json.dumps(
             {
                 'env': 'paper',
-                'brackets': [{'parent_id': '1', 'symbol': 'MNQZ6'}],
+                'brackets': [{'parent_id': '1', 'symbol': 'ABCZ6'}],
                 'submissions': [],
             }
         )
@@ -280,5 +280,5 @@ def test_an_unreadable_state_file_is_not_fatal(tmp_path):
 
 def test_no_state_path_means_no_file_and_no_complaint():
     v = venue()
-    v.place(OrderSpec('MNQZ6', Side.BUY, 1, stop_loss=20050.0))
+    v.place(OrderSpec('ABCZ6', Side.BUY, 1, stop_loss=20050.0))
     assert v.state_path is None and len(v.brackets()) == 1

@@ -148,7 +148,7 @@ def test_verification_can_be_switched_off_deliberately():
 
 def test_a_market_order_becomes_MKT():
     v = venue()
-    v.market('MNQZ6', Side.BUY, 2)
+    v.market('ABCZ6', Side.BUY, 2)
     order = v._ib.placed[-1].order
     assert order.orderType == 'MKT' and order.action == 'BUY'
     assert order.totalQuantity == 2 and order.tif == 'DAY'
@@ -156,21 +156,21 @@ def test_a_market_order_becomes_MKT():
 
 def test_a_limit_order_becomes_LMT_with_lmtPrice():
     v = venue()
-    v.limit('MNQZ6', Side.BUY, 1, 20150.25)
+    v.limit('ABCZ6', Side.BUY, 1, 20150.25)
     order = v._ib.placed[-1].order
     assert order.orderType == 'LMT' and order.lmtPrice == 20150.25
 
 
 def test_a_stop_order_becomes_STP_with_auxPrice():
     v = venue()
-    v.stop('MNQZ6', Side.SELL, 1, 20100.0)
+    v.stop('ABCZ6', Side.SELL, 1, 20100.0)
     order = v._ib.placed[-1].order
     assert order.orderType == 'STP' and order.auxPrice == 20100.0
 
 
 def test_a_stop_limit_carries_both_prices():
     v = venue()
-    v.stop_limit('MNQZ6', Side.SELL, 1, 20095.0, 20100.0)
+    v.stop_limit('ABCZ6', Side.SELL, 1, 20095.0, 20100.0)
     order = v._ib.placed[-1].order
     assert order.orderType == 'STP LMT'
     assert order.lmtPrice == 20095.0 and order.auxPrice == 20100.0
@@ -178,33 +178,33 @@ def test_a_stop_limit_carries_both_prices():
 
 def test_a_trailing_stop_by_amount_uses_auxPrice():
     v = venue()
-    v.trailing_stop('MNQZ6', Side.SELL, 1, trail_amount=25.0)
+    v.trailing_stop('ABCZ6', Side.SELL, 1, trail_amount=25.0)
     order = v._ib.placed[-1].order
     assert order.orderType == 'TRAIL' and order.auxPrice == 25.0
 
 
 def test_a_trailing_stop_by_percent_uses_trailingPercent():
     v = venue()
-    v.trailing_stop('MNQZ6', Side.SELL, 1, trail_percent=1.5)
+    v.trailing_stop('ABCZ6', Side.SELL, 1, trail_percent=1.5)
     assert v._ib.placed[-1].order.trailingPercent == 1.5
 
 
 def test_a_label_or_client_id_becomes_orderRef():
     v = venue()
-    v.place(OrderSpec('MNQZ6', Side.BUY, 1, client_order_id='rule-7'))
+    v.place(OrderSpec('ABCZ6', Side.BUY, 1, client_order_id='rule-7'))
     assert v._ib.placed[-1].order.orderRef == 'rule-7'
 
 
 def test_extra_fields_pass_straight_through():
     v = venue()
-    v.place(OrderSpec('MNQZ6', Side.BUY, 1, extra={'outsideRth': True}))
+    v.place(OrderSpec('ABCZ6', Side.BUY, 1, extra={'outsideRth': True}))
     assert v._ib.placed[-1].order.outsideRth is True
 
 
 def test_reduce_only_is_refused_rather_than_ignored():
     v = venue()
     with pytest.raises(UnsupportedError, match='reduce-only'):
-        v.place(OrderSpec('MNQZ6', Side.SELL, 1, reduce_only=True))
+        v.place(OrderSpec('ABCZ6', Side.SELL, 1, reduce_only=True))
 
 
 # ── brackets: nothing works at the exchange until the group is staged ──────
@@ -213,7 +213,7 @@ def test_reduce_only_is_refused_rather_than_ignored():
 def test_a_bracket_stages_the_parent_held_and_releases_on_the_last_child():
     v = venue()
     result = v.place(
-        OrderSpec('MNQZ6', Side.BUY, 2, take_profit=20200.0, stop_loss=20050.0)
+        OrderSpec('ABCZ6', Side.BUY, 2, take_profit=20200.0, stop_loss=20050.0)
     )
     placed = v._ib.placed
     assert len(placed) == 3
@@ -226,7 +226,7 @@ def test_a_bracket_stages_the_parent_held_and_releases_on_the_last_child():
 
 def test_bracket_children_are_linked_to_the_parent_and_to_each_other():
     v = venue()
-    v.place(OrderSpec('MNQZ6', Side.BUY, 1, take_profit=20200.0, stop_loss=20050.0))
+    v.place(OrderSpec('ABCZ6', Side.BUY, 1, take_profit=20200.0, stop_loss=20050.0))
     parent, target, stop = [t.order for t in v._ib.placed]
     assert target.parentId == parent.orderId
     assert stop.parentId == parent.orderId
@@ -236,7 +236,7 @@ def test_bracket_children_are_linked_to_the_parent_and_to_each_other():
 
 def test_bracket_children_are_the_opposite_side_and_the_right_types():
     v = venue()
-    v.place(OrderSpec('MNQZ6', Side.BUY, 3, take_profit=20200.0, stop_loss=20050.0))
+    v.place(OrderSpec('ABCZ6', Side.BUY, 3, take_profit=20200.0, stop_loss=20050.0))
     _, target, stop = [t.order for t in v._ib.placed]
     assert target.action == 'SELL' and target.orderType == 'LMT'
     assert target.lmtPrice == 20200.0 and target.totalQuantity == 3
@@ -246,7 +246,7 @@ def test_bracket_children_are_the_opposite_side_and_the_right_types():
 
 def test_a_stop_only_bracket_releases_on_its_single_child():
     v = venue()
-    v.place(OrderSpec('MNQZ6', Side.BUY, 1, stop_loss=20050.0))
+    v.place(OrderSpec('ABCZ6', Side.BUY, 1, stop_loss=20050.0))
     parent, stop = [t.order for t in v._ib.placed]
     assert parent.transmit is False and stop.transmit is True
 
@@ -257,18 +257,18 @@ def test_a_stop_only_bracket_releases_on_its_single_child():
 def test_positions_are_normalised():
     v = venue(
         positions=[
-            fake_position('MNQZ6', 2, 20100.0),
+            fake_position('ABCZ6', 2, 20100.0),
             fake_position('MESZ6', -1, 5800.0),
         ]
     )
     held = {p.symbol: p for p in v.list_positions()}
-    assert held['MNQZ6'].qty == 2 and held['MNQZ6'].side is Side.BUY
+    assert held['ABCZ6'].qty == 2 and held['ABCZ6'].side is Side.BUY
     assert held['MESZ6'].qty == -1 and held['MESZ6'].side is Side.SELL
 
 
 def test_get_position_finds_one_and_returns_none_otherwise():
-    v = venue(positions=[fake_position('MNQZ6', 2)])
-    assert v.get_position('MNQZ6').qty == 2
+    v = venue(positions=[fake_position('ABCZ6', 2)])
+    assert v.get_position('ABCZ6').qty == 2
     assert v.get_position('NOPE') is None
 
 
@@ -302,7 +302,7 @@ def test_no_accounts_raises_once_past_verification():
 
 def test_cancel_reaches_ib():
     v = venue()
-    order = v.market('MNQZ6', Side.BUY, 1)
+    order = v.market('ABCZ6', Side.BUY, 1)
     v.cancel(order.id)
     assert v._ib.cancelled == [int(order.id)]
 
@@ -313,8 +313,8 @@ def test_cancelling_an_unknown_order_raises():
 
 
 def test_flatten_sells_a_long_and_buys_a_short():
-    v = venue(positions=[fake_position('MNQZ6', 2)])
-    v.flatten('MNQZ6')
+    v = venue(positions=[fake_position('ABCZ6', 2)])
+    v.flatten('ABCZ6')
     order = v._ib.placed[-1].order
     assert order.action == 'SELL' and order.totalQuantity == 2
     assert order.orderType == 'MKT' and order.orderRef == 'flatten'
@@ -327,14 +327,14 @@ def test_flatten_sells_a_long_and_buys_a_short():
 
 def test_flattening_nothing_raises():
     with pytest.raises(NotFoundError, match='no open position'):
-        venue().flatten('MNQZ6')
+        venue().flatten('ABCZ6')
 
 
 def test_flatten_all_cancels_then_closes():
-    v = venue(positions=[fake_position('MNQZ6', 1)])
-    v.market('MNQZ6', Side.BUY, 1)
+    v = venue(positions=[fake_position('ABCZ6', 1)])
+    v.market('ABCZ6', Side.BUY, 1)
     result = v.flatten_all()
-    assert result['flattened'] == ['MNQZ6']
+    assert result['flattened'] == ['ABCZ6']
     assert result['cancelled']
 
 
@@ -344,9 +344,9 @@ def test_flatten_all_cancels_then_closes():
 def test_an_ambiguous_symbol_is_refused_rather_than_guessed():
     from fakes import FakeContract
 
-    v = venue(qualify=[FakeContract('MNQ', 'MNQZ6'), FakeContract('MNQ', 'MNQH7')])
+    v = venue(qualify=[FakeContract('ABC', 'ABCZ6'), FakeContract('ABC', 'ABCH7')])
     with pytest.raises(ConfigError, match='ambiguous'):
-        v.market('MNQ', Side.BUY, 1)
+        v.market('ABC', Side.BUY, 1)
 
 
 def test_an_unknown_symbol_is_refused():
@@ -358,6 +358,6 @@ def test_an_unknown_symbol_is_refused():
 def test_a_contract_factory_overrides_resolution():
     from fakes import FakeContract
 
-    v = venue(contract_factory=lambda s: FakeContract('X', 'MNQZ6'))
+    v = venue(contract_factory=lambda s: FakeContract('X', 'ABCZ6'))
     v.market('whatever', Side.BUY, 1)
-    assert v._ib.placed[-1].contract.localSymbol == 'MNQZ6'
+    assert v._ib.placed[-1].contract.localSymbol == 'ABCZ6'

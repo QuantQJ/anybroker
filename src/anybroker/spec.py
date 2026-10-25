@@ -58,7 +58,7 @@ NEEDS_TRAIL = frozenset({OrderType.TRAILING_STOP, OrderType.TRAILING_STOP_LIMIT}
 class OrderSpec:
     """A venue-neutral order.
 
-        OrderSpec('MNQZ6', Side.BUY, 2, OrderType.LIMIT, limit_price=20150.25)
+        OrderSpec('ABCZ6', Side.BUY, 2, OrderType.LIMIT, limit_price=20150.25)
 
     With ``take_profit`` or ``stop_loss`` set it becomes a bracket: the entry
     plus one or two protective children on the opposite side. Venues that

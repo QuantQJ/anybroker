@@ -4,7 +4,7 @@
 
     ib = open_venue('ibkr', Env.PAPER, client_id=7788)
     with ib:
-        ib.limit('MNQZ6', Side.BUY, 2, 20150.25)
+        ib.limit('ABCZ6', Side.BUY, 2, 20150.25)
         print(ib.list_positions())
 
 The crypto exchanges come from ccxt, which already covers 104 of them with

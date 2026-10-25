@@ -113,14 +113,33 @@ def test_a_missing_driver_is_reported_with_how_to_get_it(monkeypatch):
 # `pip install "anybroker[ibkr]"` is advice that cannot work.
 
 
-def test_every_install_hint_names_the_repository():
-    from anybroker.registry import available
+def test_every_install_hint_names_the_repository(monkeypatch):
+    """Every hint, not just the ones this machine happens to need.
+
+    Read from the live environment, this asserted nothing at all on a
+    machine with every driver installed -- and failed outright, because
+    the empty list was treated as a failure rather than as nothing to
+    check. So the drivers are forced missing and all of them are read.
+    """
+    import importlib.util
+    import sys
+
+    real = importlib.util.find_spec
+
+    def nothing_installed(name, *a, **kw):
+        if name in ('ib_insync', 'tradovate_client', 'alpaca'):
+            return None
+        return real(name, *a, **kw)
+
+    monkeypatch.setattr(importlib.util, 'find_spec', nothing_installed)
+    monkeypatch.setitem(sys.modules, 'ccxt', None)
 
     out = available()
     hints = list(out['native_missing'].values())
+    assert set(out['native_missing']) == set(NATIVE_VENUES)
     if 'missing_ccxt' in out:
         hints.append(out['missing_ccxt'])
-    assert hints, 'nothing was missing, so nothing was asserted'
+    assert hints
     for hint in hints:
         if 'pip install' not in hint:
             continue  # the "not actually ccxt" diagnostic

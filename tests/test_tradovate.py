@@ -179,32 +179,32 @@ def test_sides_use_tradovates_capitalisation():
 
 def test_a_market_order():
     v = venue()
-    order = v.market('MNQZ6', Side.BUY, 2)
+    order = v.market('ABCZ6', Side.BUY, 2)
     kw = last(v, 'place')['kw']
-    assert kw['action'] == 'Buy' and kw['symbol'] == 'MNQZ6'
+    assert kw['action'] == 'Buy' and kw['symbol'] == 'ABCZ6'
     assert kw['qty'] == 2 and kw['order_type'] == 'Market'
     assert kw['time_in_force'] == 'Day'
     assert 'price' not in kw and 'stop_price' not in kw
-    assert order.id == '4242' and order.symbol == 'MNQZ6'
+    assert order.id == '4242' and order.symbol == 'ABCZ6'
 
 
 def test_a_limit_order_carries_its_price():
     v = venue()
-    v.limit('MNQZ6', Side.BUY, 1, 20150.25)
+    v.limit('ABCZ6', Side.BUY, 1, 20150.25)
     kw = last(v, 'place')['kw']
     assert kw['order_type'] == 'Limit' and kw['price'] == 20150.25
 
 
 def test_a_stop_order_carries_its_stop():
     v = venue()
-    v.stop('MNQZ6', Side.SELL, 1, 20100.0)
+    v.stop('ABCZ6', Side.SELL, 1, 20100.0)
     kw = last(v, 'place')['kw']
     assert kw['order_type'] == 'Stop' and kw['stop_price'] == 20100.0
 
 
 def test_a_stop_limit_carries_both():
     v = venue()
-    v.stop_limit('MNQZ6', Side.SELL, 1, 20095.0, 20100.0)
+    v.stop_limit('ABCZ6', Side.SELL, 1, 20095.0, 20100.0)
     kw = last(v, 'place')['kw']
     assert kw['order_type'] == 'StopLimit'
     assert kw['price'] == 20095.0 and kw['stop_price'] == 20100.0
@@ -212,7 +212,7 @@ def test_a_stop_limit_carries_both():
 
 def test_a_trailing_stop_by_amount_goes_through_as_a_stop_price():
     v = venue()
-    v.trailing_stop('MNQZ6', Side.SELL, 1, trail_amount=25.0)
+    v.trailing_stop('ABCZ6', Side.SELL, 1, trail_amount=25.0)
     kw = last(v, 'place')['kw']
     assert kw['order_type'] == 'TrailingStop' and kw['stop_price'] == 25.0
 
@@ -220,7 +220,7 @@ def test_a_trailing_stop_by_amount_goes_through_as_a_stop_price():
 def test_a_percent_trail_is_refused_rather_than_guessed():
     v = venue()
     with pytest.raises(UnsupportedError, match='does not take a trailing percent'):
-        v.trailing_stop('MNQZ6', Side.SELL, 1, trail_percent=1.5)
+        v.trailing_stop('ABCZ6', Side.SELL, 1, trail_percent=1.5)
     assert not [c for c in v.client.calls if c['name'] == 'place']
 
 
@@ -232,7 +232,7 @@ def test_time_in_force_is_passed():
     v = venue()
     v.place(
         OrderSpec(
-            'MNQZ6',
+            'ABCZ6',
             Side.BUY,
             1,
             OrderType.LIMIT,
@@ -245,31 +245,31 @@ def test_time_in_force_is_passed():
 
 def test_a_client_order_id_is_passed():
     v = venue()
-    v.place(OrderSpec('MNQZ6', Side.BUY, 1, client_order_id='rule-7'))
+    v.place(OrderSpec('ABCZ6', Side.BUY, 1, client_order_id='rule-7'))
     assert last(v, 'place')['kw']['client_order_id'] == 'rule-7'
 
 
 def test_a_label_becomes_text_when_there_is_no_client_id():
     v = venue()
-    v.place(OrderSpec('MNQZ6', Side.BUY, 1, label='james'))
+    v.place(OrderSpec('ABCZ6', Side.BUY, 1, label='james'))
     assert last(v, 'place')['kw']['text'] == 'james'
 
 
 def test_reduce_only_is_refused_rather_than_ignored():
     v = venue()
     with pytest.raises(UnsupportedError, match='reduce-only'):
-        v.place(OrderSpec('MNQZ6', Side.SELL, 1, reduce_only=True))
+        v.place(OrderSpec('ABCZ6', Side.SELL, 1, reduce_only=True))
 
 
 def test_extra_passes_tradovate_only_fields_through():
     v = venue()
-    v.place(OrderSpec('MNQZ6', Side.BUY, 1, extra={'max_show': 1}))
+    v.place(OrderSpec('ABCZ6', Side.BUY, 1, extra={'max_show': 1}))
     assert last(v, 'place')['kw']['max_show'] == 1
 
 
 def test_an_account_is_passed_when_given():
     v = TradovateVenue(Env.PAPER, client=FakeTradovate(), account='DEMO1234')
-    v.market('MNQZ6', Side.BUY, 1)
+    v.market('ABCZ6', Side.BUY, 1)
     assert last(v, 'place')['kw']['account'] == 'DEMO1234'
 
 
@@ -279,7 +279,7 @@ def test_an_account_is_passed_when_given():
 def test_a_bracket_uses_tradovates_one_sends_other():
     v = venue()
     order = v.place(
-        OrderSpec('MNQZ6', Side.BUY, 2, take_profit=20200.0, stop_loss=20050.0)
+        OrderSpec('ABCZ6', Side.BUY, 2, take_profit=20200.0, stop_loss=20050.0)
     )
     assert not [c for c in v.client.calls if c['name'] == 'place'], (
         'a bracket must not go out as a bare entry first'
@@ -296,14 +296,14 @@ def test_a_bracket_uses_tradovates_one_sends_other():
 
 def test_a_stop_only_bracket_sends_one_leg():
     v = venue()
-    v.place(OrderSpec('MNQZ6', Side.BUY, 1, stop_loss=20050.0))
+    v.place(OrderSpec('ABCZ6', Side.BUY, 1, stop_loss=20050.0))
     kw = last(v, 'place_oso')['kw']
     assert 'bracket1' in kw and 'bracket2' not in kw
 
 
 def test_a_short_entry_brackets_with_buys():
     v = venue()
-    v.place(OrderSpec('MNQZ6', Side.SELL, 1, take_profit=20000.0, stop_loss=20100.0))
+    v.place(OrderSpec('ABCZ6', Side.SELL, 1, take_profit=20000.0, stop_loss=20100.0))
     kw = last(v, 'place_oso')['kw']
     assert kw['bracket1']['action'] == 'Buy'
     assert kw['bracket2']['action'] == 'Buy'
@@ -313,11 +313,11 @@ def test_a_short_entry_brackets_with_buys():
 
 
 def test_positions_come_back_named():
-    v = venue(positions={'MNQZ6': (2, 20100.5, 11), 'MESZ6': (-1, 5800.0, 12)})
+    v = venue(positions={'ABCZ6': (2, 20100.5, 11), 'MESZ6': (-1, 5800.0, 12)})
     held = {p.symbol: p for p in v.list_positions()}
-    assert held['MNQZ6'].qty == 2 and held['MNQZ6'].side is Side.BUY
+    assert held['ABCZ6'].qty == 2 and held['ABCZ6'].side is Side.BUY
     assert held['MESZ6'].qty == -1 and held['MESZ6'].side is Side.SELL
-    assert held['MNQZ6'].raw['contract_id'] == 11
+    assert held['ABCZ6'].raw['contract_id'] == 11
 
 
 def test_the_account_is_normalised():
@@ -346,14 +346,14 @@ def test_cancel_all_uses_the_clients_own_sweep():
 
 
 def test_flatten_liquidates_by_contract_id():
-    v = venue(positions={'MNQZ6': (2, 20100.0, 11)})
-    v.flatten('MNQZ6')
+    v = venue(positions={'ABCZ6': (2, 20100.0, 11)})
+    v.flatten('ABCZ6')
     assert last(v, 'liquidate')['args'] == (11,)
 
 
 def test_flattening_nothing_raises():
     with pytest.raises(NotFoundError, match='no open position'):
-        venue().flatten('MNQZ6')
+        venue().flatten('ABCZ6')
 
 
 def test_flatten_all_renames_liquidated_to_flattened():
@@ -369,7 +369,7 @@ def test_a_refusal_in_the_reply_raises():
         reply={'failureReason': 'InsufficientMargin', 'failureText': 'not enough'}
     )
     with pytest.raises(RejectedError, match='InsufficientMargin'):
-        v.market('MNQZ6', Side.BUY, 1)
+        v.market('ABCZ6', Side.BUY, 1)
 
 
 def test_an_unexpected_client_error_becomes_a_transport_error():
@@ -377,4 +377,4 @@ def test_an_unexpected_client_error_becomes_a_transport_error():
 
     v = venue(raises=RuntimeError('socket went away'))
     with pytest.raises(TransportError, match='socket went away'):
-        v.market('MNQZ6', Side.BUY, 1)
+        v.market('ABCZ6', Side.BUY, 1)

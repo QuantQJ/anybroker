@@ -71,7 +71,7 @@ class TradovateVenue(Venue):
     """Tradovate futures.
 
         venue = TradovateVenue(Env.PAPER, credential_path='/secure/key.json')
-        venue.limit('MNQZ6', Side.BUY, 2, 20150.25)
+        venue.limit('ABCZ6', Side.BUY, 2, 20150.25)
 
     Credentials are the client library's business: pass ``credential_path=``,
     ``credentials=``, or set ``TRADOVATE_CREDENTIALS``. There is no default

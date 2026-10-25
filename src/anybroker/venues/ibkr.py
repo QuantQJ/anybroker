@@ -130,7 +130,7 @@ class IbkrVenue(Venue):
 
         venue = IbkrVenue(Env.PAPER, client_id=7788, port=4001)
         with venue:
-            venue.limit('MNQZ6', Side.BUY, 2, 20150.25)
+            venue.limit('ABCZ6', Side.BUY, 2, 20150.25)
 
     ``port`` is required and the environment is checked against the account IB
     hands back, so a port that points at the wrong book fails at connect time
