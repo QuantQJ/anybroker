@@ -295,6 +295,26 @@ by launchd at 1:36am does not start blind. IB is still the authority: the file
 is a hint that `resync()` checks, and any submission restored from it is
 marked **unresolved**, because this process never saw the broker confirm it.
 
+## TradingView alerts
+
+A TradingView alert is a webhook, so `anybroker.webhook` is a small server that
+turns one into an order at any venue above. It runs on your own machine; there
+is no account and no monthly fee.
+
+```sh
+python -m anybroker.webhook secret          # make one
+ANYHOOK_SECRET=... ANYHOOK_VENUE=tradovate ANYHOOK_ENV=paper \
+  python -m anybroker.webhook serve
+```
+
+Point the alert at `http://your-host/alert/<secret>` and send either JSON or a
+line like `buy 1 ABCZ6`. Installed as a command, it is `anyhook serve`.
+
+Three things it will not do: start without a shared secret, reach a live
+account without being told to in those words, or guess a size or a side the
+alert did not state. Redeliveries are the same order, not a second one --
+TradingView retries, and the idempotency above is what makes that safe.
+
 ## Errors
 
 Everything raises. Nothing returns a dictionary with an error key in it that a

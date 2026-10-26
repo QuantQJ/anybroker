@@ -53,6 +53,11 @@ Issues = "https://github.com/QuantQJ/anybroker/issues"
 # would never resolve. Hatchling requires this to be explicit.
 allow-direct-references = true
 
+[project.scripts]
+# The webhook bridge, as its own command: the alert server needs no venue
+# extra of its own, because the venue it routes to is this same package.
+anyhook = "anybroker.webhook.__main__:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/anybroker"]
 
