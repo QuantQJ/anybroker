@@ -22,6 +22,8 @@ being locked out. Nothing here defeats that.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from typing import Any
 
 from ..enums import Env, OrderType, Side, TimeInForce
@@ -35,6 +37,7 @@ from ..errors import (
     UnsupportedError,
 )
 from ..models import Account, Order, Position
+from ..spec import OrderSpec
 from ..venue import Capabilities, Venue
 
 __all__ = ['TradovateVenue', 'TV_ENV', 'TV_SIDE', 'TV_ORDER_TYPES', 'TV_TIF']
@@ -137,6 +140,20 @@ class TradovateVenue(Venue):
                     venue=self.name,
                 ) from exc
             kw = {k: v for k, v in self._client_kw.items() if v is not None}
+            # A config file, an env block and a JSON key all hand you a plain
+            # mapping. Passing one straight through failed deep inside the
+            # client on an attribute the dict never had, so it is converted
+            # here where the names are still the user's own.
+            supplied = kw.get('credentials')
+            if isinstance(supplied, Mapping):
+                from tradovate_client.auth import Credentials
+
+                try:
+                    kw['credentials'] = Credentials.from_mapping(
+                        dict(supplied), source='the credentials you passed'
+                    )
+                except Exception as exc:
+                    raise ConfigError(str(exc), venue=self.name) from exc
             self._client = TradovateClient(TV_ENV[self.env], **kw)
         return self._client
 
@@ -304,7 +321,17 @@ class TradovateVenue(Venue):
         if contract_id is None:
             raise NotFoundError('no contract id for %s' % symbol, venue=self.name)
         reply = self._guard(self.client.liquidate, contract_id)
-        return _order_of(reply or {}, self.name)
+        # Tradovate's liquidate reply is an orderId and nothing more, so the
+        # Order built from it alone named no symbol, side or size. The closing
+        # order is fully determined by the position it closes, so say so:
+        # opposite side, the whole position, at the market.
+        closing = OrderSpec(
+            symbol=symbol,
+            side=Side.SELL if position.qty > 0 else Side.BUY,
+            qty=abs(position.qty),
+            order_type=OrderType.MARKET,
+        )
+        return _order_of(reply or {}, self.name, closing)
 
     def flatten_all(self, *, cancel_first=True) -> dict:
         # account= is passed through, so flattening one account does not

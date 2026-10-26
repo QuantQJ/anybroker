@@ -378,3 +378,97 @@ def test_an_unexpected_client_error_becomes_a_transport_error():
     v = venue(raises=RuntimeError('socket went away'))
     with pytest.raises(TransportError, match='socket went away'):
         v.market('ABCZ6', Side.BUY, 1)
+
+
+# Tradovate's liquidate reply carries an orderId and nothing else, so the
+# Order handed back named no symbol, no side and no size -- a caller who
+# logged the return value of flatten() recorded a blank. The closing order is
+# fully determined by the position being closed, so describe it from that.
+
+
+def test_flatten_returns_an_order_that_describes_the_close():
+    v = venue(positions={'ABCZ6': (2, 20100.0, 11)})
+    order = v.flatten('ABCZ6')
+    assert order.symbol == 'ABCZ6'
+    assert order.side is Side.SELL
+    assert order.qty == 2.0
+    assert order.order_type is OrderType.MARKET
+
+
+def test_flattening_a_short_buys_it_back():
+    v = venue(positions={'ABCZ6': (-3, 20100.0, 11)})
+    order = v.flatten('ABCZ6')
+    assert order.side is Side.BUY
+    assert order.qty == 3.0
+
+
+# A config file, an env block and a JSON key all hand you a plain mapping.
+# Passing one through as credentials= died deep inside the client library on
+# an attribute a dict never had ("'dict' object has no attribute 'name'"), so
+# it is converted at the boundary where the field names are still the
+# caller's own and a missing one can be named.
+
+
+def _fake_client_library(monkeypatch, seen):
+    import sys
+    import types
+
+    module = types.ModuleType('tradovate_client')
+    auth = types.ModuleType('tradovate_client.auth')
+
+    class Credentials:
+        FIELDS = ('name', 'password', 'appId', 'appVersion', 'deviceId', 'cid', 'sec')
+
+        def __init__(self, **kw):
+            self.kw = kw
+
+        @classmethod
+        def from_mapping(cls, data, *, source='mapping'):
+            missing = [f for f in cls.FIELDS if not data.get(f)]
+            if missing:
+                raise ValueError('%s is missing: %s' % (source, ', '.join(missing)))
+            return cls(**data)
+
+    class Client:
+        def __init__(self, env, **kw):
+            seen['kw'] = kw
+
+    module.TradovateClient = Client
+    auth.Credentials = Credentials
+    monkeypatch.setitem(sys.modules, 'tradovate_client', module)
+    monkeypatch.setitem(sys.modules, 'tradovate_client.auth', auth)
+    return Credentials
+
+
+FULL_KEY = {
+    'name': 'u',
+    'password': 'p',
+    'appId': 'a',
+    'appVersion': '1',
+    'deviceId': 'd',
+    'cid': 1,
+    'sec': 's',
+}
+
+
+def test_a_mapping_of_credentials_is_converted_not_passed_raw(monkeypatch):
+    seen = {}
+    Credentials = _fake_client_library(monkeypatch, seen)
+    TradovateVenue(Env.PAPER, credentials=dict(FULL_KEY)).connect()
+    assert isinstance(seen['kw']['credentials'], Credentials)
+    assert seen['kw']['credentials'].kw['name'] == 'u'
+
+
+def test_an_incomplete_mapping_names_the_missing_field(monkeypatch):
+    partial = {k: v for k, v in FULL_KEY.items() if k != 'deviceId'}
+    _fake_client_library(monkeypatch, {})
+    with pytest.raises(ConfigError, match='deviceId'):
+        TradovateVenue(Env.PAPER, credentials=partial).connect()
+
+
+def test_a_credentials_object_is_passed_through_untouched(monkeypatch):
+    seen = {}
+    _fake_client_library(monkeypatch, seen)
+    sentinel = object()
+    TradovateVenue(Env.PAPER, credentials=sentinel).connect()
+    assert seen['kw']['credentials'] is sentinel
