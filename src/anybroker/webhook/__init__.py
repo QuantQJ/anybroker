@@ -25,7 +25,6 @@ from .alert import (
 from .config import Config, ConfigError, new_secret
 from .journal import Journal
 
-
 __all__ = [
     'Alert',
     'AlertError',

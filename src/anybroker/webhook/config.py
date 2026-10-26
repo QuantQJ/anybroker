@@ -13,8 +13,8 @@ import re
 import secrets
 import urllib.parse
 
-from .alert import TRADINGVIEW_IPS
 from ..errors import ConfigError as _BrokerConfigError
+from .alert import TRADINGVIEW_IPS
 
 __all__ = ['Config', 'ConfigError', 'new_secret', 'LOOPBACK', 'DEFAULT_ALLOW_IPS']
 
