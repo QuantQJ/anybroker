@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "anybroker"
 version = "0.1.0"
-description = "One interface over the brokers you actually trade: ccxt for crypto, native venues for the futures and retail brokers ccxt has never had."
+description = "Python interface for orders, positions, accounts, and TradingView webhooks across IBKR, Tradovate, Alpaca, and CCXT."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
@@ -29,13 +29,14 @@ dependencies = []
 [project.optional-dependencies]
 crypto = ["ccxt>=4.4.0"]
 ibkr = ["ib_insync>=0.9.86"]
-tradovate = ["tradovate-client @ git+https://github.com/QuantQJ/tradovate-client.git"]
+tradovate = ["tradovate-client @ git+https://github.com/QuantQJ/tradovate-client.git@d9770356efffddd8621b280ad10a619e95e143a3"]
 alpaca = ["alpaca-py>=0.33"]
-all = ["ccxt>=4.4.0", "ib_insync>=0.9.86", "alpaca-py>=0.33"]
+all = ["ccxt>=4.4.0", "ib_insync>=0.9.86", "alpaca-py>=0.33", "tradovate-client @ git+https://github.com/QuantQJ/tradovate-client.git@d9770356efffddd8621b280ad10a619e95e143a3"]
 dev = [
   "pytest>=7.4",
   "mypy>=1.8",
   "ruff>=0.6",
+  "tradovate-client @ git+https://github.com/QuantQJ/tradovate-client.git@d9770356efffddd8621b280ad10a619e95e143a3",
   # every venue SDK, so CI runs the tests that assert real payloads
   "ccxt>=4.4.0",
   "ib_insync>=0.9.86",

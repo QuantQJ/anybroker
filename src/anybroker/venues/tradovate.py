@@ -1,8 +1,5 @@
 """Tradovate, through the ``tradovate-client`` library.
 
-ccxt covers 104 exchanges and Tradovate is not one of them, so this is the
-library's own venue, the same as IBKR.
-
 It drives ``tradovate-client`` with plain strings -- ``demo``/``live``,
 ``Buy``/``Sell``, ``Market``, ``Day`` -- every one of which is a value from
 Tradovate's own published enums. That keeps this module free of the other
@@ -289,7 +286,16 @@ class TradovateVenue(Venue):
         return _order_of(reply or {'orderId': order_id}, self.name)
 
     def cancel_all(self) -> list:
-        return list(self._guard(self.client.cancel_working) or [])
+        account = self._guard(self.client.account, self.account)
+        return self._cancel_account_orders(account.id)
+
+    def _cancel_account_orders(self, account_id) -> list:
+        cancelled = []
+        for order in self._guard(self.client.working_orders):
+            if order.account_id == account_id:
+                self.cancel(order.id)
+                cancelled.append(order.id)
+        return cancelled
 
     def modify(self, order_id, **changes) -> Any:
         mapping = {
@@ -333,17 +339,17 @@ class TradovateVenue(Venue):
         return _order_of(reply or {}, self.name, closing)
 
     def flatten_all(self, *, cancel_first=True) -> dict:
-        # account= is passed through, so flattening one account does not
-        # cancel another account's working orders on the same login.
-        result = self._guard(
-            self.client.flatten_all, account=self.account, cancel_first=cancel_first
-        )
-        if isinstance(result, dict):
-            return {
-                'cancelled': list(result.get('cancelled') or []),
-                'flattened': list(result.get('liquidated') or []),
-            }
-        return super().flatten_all(cancel_first=cancel_first)
+        account = self._guard(self.client.account, self.account)
+        cancelled = self._cancel_account_orders(account.id) if cancel_first else []
+        flattened = []
+        for position in self._guard(self.client.positions, account.id):
+            if position.net_pos:
+                reply = self._guard(
+                    self.client.liquidate, position.contract_id, account=account.name
+                )
+                _order_of(reply or {}, self.name)
+                flattened.append(position.contract_id)
+        return {'cancelled': cancelled, 'flattened': flattened}
 
     # ── error translation ───────────────────────────────────────────────────
     def _guard(self, fn, *args, **kw) -> Any:

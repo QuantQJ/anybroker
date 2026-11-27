@@ -1,5 +1,7 @@
 """Tradovate, against a fake tradovate-client. No credentials, no network."""
 
+from types import SimpleNamespace
+
 import pytest
 
 from anybroker import (
@@ -38,6 +40,17 @@ class FakeTradovate:
             raise self._raises
 
     # reads
+    def account(self, name=None):
+        self._log('account', name)
+        return SimpleNamespace(id=7, name='DEMO1234')
+
+    def positions(self, account_id=None):
+        self._log('positions', account_id)
+        return [
+            SimpleNamespace(contract_id=cid, net_pos=q)
+            for q, _price, cid in self._positions.values()
+        ]
+
     def snapshot(self, account=None):
         self._log('snapshot', account=account)
         import types
@@ -340,9 +353,15 @@ def test_cancel_reaches_the_client():
     assert last(v, 'cancel')['args'] == (55,)
 
 
-def test_cancel_all_uses_the_clients_own_sweep():
-    v = venue()
-    assert v.cancel_all() == [1, 2]
+def test_cancel_all_scopes_orders_to_selected_account():
+    v = venue(
+        orders=[
+            SimpleNamespace(id=1, account_id=7),
+            SimpleNamespace(id=2, account_id=8),
+        ]
+    )
+    assert v.cancel_all() == [1]
+    assert [c['args'][0] for c in v.client.calls if c['name'] == 'cancel'] == [1]
 
 
 def test_flatten_liquidates_by_contract_id():
@@ -357,7 +376,10 @@ def test_flattening_nothing_raises():
 
 
 def test_flatten_all_renames_liquidated_to_flattened():
-    v = venue()
+    v = venue(
+        positions={'ABCZ6': (2, 20100.0, 11)},
+        orders=[SimpleNamespace(id=1, account_id=7)],
+    )
     assert v.flatten_all() == {'cancelled': [1], 'flattened': [11]}
 
 
@@ -472,3 +494,39 @@ def test_a_credentials_object_is_passed_through_untouched(monkeypatch):
     sentinel = object()
     TradovateVenue(Env.PAPER, credentials=sentinel).connect()
     assert seen['kw']['credentials'] is sentinel
+
+
+@pytest.mark.parametrize('method', ['cancel_all', 'flatten_all'])
+def test_bulk_resolves_account_before_writes(method):
+    client = FakeTradovate()
+
+    def ambiguous(name=None):
+        raise ValueError('select an account')
+
+    client.account = ambiguous
+    with pytest.raises(Exception, match='select an account'):
+        getattr(venue(client=client), method)()
+    assert not client.calls
+
+
+@pytest.mark.parametrize('method', ['cancel_all', 'flatten_all'])
+def test_bulk_cancel_surfaces_broker_rejection(method):
+    client = FakeTradovate(orders=[SimpleNamespace(id=1, account_id=7)])
+    client.cancel = lambda order_id: {'failureReason': 'TradingLocked'}
+    with pytest.raises(RejectedError):
+        getattr(venue(client=client), method)()
+    assert not any(c['name'] == 'liquidate' for c in client.calls)
+
+
+def test_bulk_liquidation_surfaces_broker_rejection():
+    client = FakeTradovate(positions={'ABCZ6': (2, 20100.0, 11)})
+    client.liquidate = lambda *a, **kw: {'failureReason': 'TradingLocked'}
+    with pytest.raises(RejectedError):
+        venue(client=client).flatten_all(cancel_first=False)
+
+
+def test_bulk_flatten_without_cancellation_skips_flat_positions():
+    v = venue(positions={'ABCZ6': (2, 20100.0, 11), 'XYZ': (0, 0, 12)})
+    assert v.flatten_all(cancel_first=False) == {'cancelled': [], 'flattened': [11]}
+    assert last(v, 'liquidate')['kw'] == {'account': 'DEMO1234'}
+    assert not any(c['name'] == 'cancel' for c in v.client.calls)

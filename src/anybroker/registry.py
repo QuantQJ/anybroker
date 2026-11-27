@@ -16,7 +16,7 @@ from .venue import Venue
 
 __all__ = ['open_venue', 'available', 'NATIVE_VENUES', 'CCXT_ONLY_NOTE']
 
-#: Venues this library implements itself, because ccxt has never had them.
+#: Venues implemented through their broker SDKs.
 NATIVE_VENUES = ('ibkr', 'tradovate', 'alpaca')
 
 CCXT_ONLY_NOTE = (

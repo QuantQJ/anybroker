@@ -19,7 +19,7 @@ Four jobs, all of which must be green:
 
 | job | what it does |
 | --- | --- |
-| `test` | the suite on Python 3.9 through 3.13 |
+| `test` | the suite on Python 3.10 through 3.13 |
 | `types` | `mypy src` — the package ships `py.typed`, so the annotations are a promise |
 | `lint` | `ruff check` and `ruff format --check` |
 | `build` | the wheel builds and `twine check` passes |

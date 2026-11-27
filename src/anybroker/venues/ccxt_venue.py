@@ -1,13 +1,6 @@
 """Every crypto venue, through ccxt.
 
-ccxt already covers 104 exchanges with every order type, unified symbols and
-rate limiting, maintained by a project with tens of thousands of users. There
-is no reason to hand-write Coinbase, Kraken, Kraken Futures or OKX again, so
-this does not: it adapts ccxt to this library's interface and gets out of the
-way.
-
-What ccxt does not have, and never has, is Tradovate, IBKR, Tradier,
-TradeStation or NinjaTrader. Those are the library's own venues.
+Adapts CCXT exchanges to the Venue interface.
 
 Capabilities are read from the exchange's own ``has`` table rather than
 assumed, so a venue that cannot do trailing stops says so before an order is

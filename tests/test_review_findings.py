@@ -149,22 +149,52 @@ def test_working_orders_and_get_order_go_through_the_same_path():
 # ══════════════════════════════════════════════════════════════════════════
 
 
+def bulk_client():
+    from tradovate_client import TradovateClient
+
+    client = TradovateClient('demo')
+    data = {
+        '/account/list': [
+            {'id': 7, 'name': 'ACCOUNT_A'},
+            {'id': 8, 'name': 'ACCOUNT_B'},
+        ],
+        '/order/list': [
+            {'id': 1, 'accountId': 7, 'ordStatus': 'Working'},
+            {'id': 2, 'accountId': 8, 'ordStatus': 'Working'},
+        ],
+        '/position/list': [
+            {'accountId': 7, 'contractId': 11, 'netPos': 2},
+            {'accountId': 8, 'contractId': 12, 'netPos': -3},
+        ],
+    }
+    client._get = lambda endpoint, **kw: data[endpoint]
+    client.calls = []
+
+    def post(endpoint, body):
+        client.calls.append((endpoint, body))
+        return {'orderId': 99}
+
+    client._post = post
+    return client
+
+
 def test_flatten_all_is_scoped_to_the_account_it_was_given():
-    client = FakeTradovateClient()
+    client = bulk_client()
     v = TradovateVenue(Env.PAPER, client=client, account='ACCOUNT_A')
-    v.flatten_all()
-    sent = [kw for name, kw in client.calls if name == 'flatten_all'][0]
-    assert sent['account'] == 'ACCOUNT_A', (
-        'without the account, the client cancels every working order on the '
-        'login, including another account'
-    )
+    assert v.flatten_all() == {'cancelled': [1], 'flattened': [11]}
+    assert len(client.calls) == 2
+    assert client.calls[0][1]['orderId'] == 1
+    assert client.calls[1][1]['accountId'] == 7
+    assert client.calls[1][1]['contractId'] == 11
 
 
-def test_a_venue_with_no_account_passes_none_rather_than_guessing():
-    client = FakeTradovateClient()
-    TradovateVenue(Env.PAPER, client=client).flatten_all()
-    sent = [kw for name, kw in client.calls if name == 'flatten_all'][0]
-    assert sent['account'] is None
+def test_a_venue_with_no_account_refuses_before_writing():
+    from anybroker import ConfigError
+
+    client = bulk_client()
+    with pytest.raises(ConfigError):
+        TradovateVenue(Env.PAPER, client=client).flatten_all()
+    assert client.calls == []
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -545,7 +575,7 @@ def test_a_refusal_crosses_the_library_boundary_as_a_refusal(monkeypatch):
     # tradovate_client first, and without it the venue takes its ImportError
     # branch and every failure becomes a TransportError.
     parent = sys.modules.get('tradovate_client') or types.ModuleType('tradovate_client')
-    parent.errors = stub
+    monkeypatch.setattr(parent, 'errors', stub, raising=False)
     monkeypatch.setitem(sys.modules, 'tradovate_client', parent)
     monkeypatch.setitem(sys.modules, 'tradovate_client.errors', stub)
 
